@@ -4,7 +4,6 @@ import (
 	"net"
 	"sync/atomic"
 	"fmt"
-	"io"
 )
 
 var SessionClosedErr = fmt.Errorf("[session] Session Closed")
@@ -12,12 +11,12 @@ var SessionClosedErr = fmt.Errorf("[session] Session Closed")
 var globalSessionId uint64
 
 type Session struct {
-	id uint64
-	manager *Manager
-	conn 	net.Conn
+	id 			uint64
+	manager 	*Manager
+	conn 		net.Conn
 	closeFlag	int32
-	closeChan chan int
-	sendChan	chan []byte
+	closeChan 	chan int
+	sendChan	chan interface{}
 }
 
 func NewSession(conn *net.Conn, sendChanSize int) *Session {
@@ -32,7 +31,7 @@ func newSession(manager *Manager, conn net.Conn, sendChanSize int) *Session {
 		conn: conn,
 	}
 	if sendChanSize > 0 {
-		session.sendChan = make(chan []byte, sendChanSize)
+		session.sendChan = make(chan interface{}, sendChanSize)
 		go session.sendLoop()
 	}
 	return session
@@ -43,7 +42,15 @@ func (session *Session) sendLoop() {
 	for {
 		select {
 		case msg := <-session.sendChan:
-			if _, err := session.conn.Write(msg); err != nil {
+			lens := len(msg.([]byte))
+			buf := make([]byte, 5 + lens)
+			buf[0] = '0'
+			buf[1] = byte(uint32(lens))
+			buf[2] = byte(uint32(lens) >> 8)
+			buf[3] = byte(uint32(lens) >> 16)
+			buf[4] = byte(uint32(lens) >> 24)
+			copy(buf[5:], msg.([]byte))
+			if _, err := session.conn.Write(buf); err != nil {
 				return
 			}
 		case <-session.closeChan:
@@ -65,5 +72,16 @@ func (session *Session) Close() error {
 }
 
 func (session *Session) Receive() ([]byte, error) {
-	//test := io.Reader(session.conn)
+	var buf = make([]byte,5)
+	_, err := session.conn.Read(buf[0:5])
+	if err != nil {
+		return nil, err
+	}
+	lens := int(uint32(buf[1]) | uint32(buf[2])<<8 | uint32(buf[3])<<16 | uint32(buf[4])<<24)
+	buf = make([]byte, lens)
+	_, err = session.conn.Read(buf[0:lens])
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
 }

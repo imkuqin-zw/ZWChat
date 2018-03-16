@@ -28,19 +28,18 @@ func handleClient(conn net.Conn)  {
 	fmt.Println(clientIp)
 	defer conn.Close()
 	for {
-		var body [2]byte
-		n, err := conn.Read(body[0:])
+		var buf = make([]byte,5)
+		_, err := conn.Read(buf[0:5])
 		if err != nil {
 			return
 		}
-		pData := body[:n]
-		msg := &protobuf.OffsetP2PMsg{
-			SourceUID: 1,
-			TargetUID: 2,
-			MsgID: "12",
-			Msg: "fdsaf",
-		}
-		if err := proto.Unmarshal(pData, msg); err != nil {
+		lens := int(uint32(buf[1]) | uint32(buf[2])<<8 | uint32(buf[3])<<16 | uint32(buf[4])<<24)
+		fmt.Println(lens)
+
+		buf = make([]byte, lens)
+		_, err = conn.Read(buf[0:lens])
+		msg := &protobuf.OffsetP2PMsg{}
+		if err := proto.Unmarshal(buf, msg); err != nil {
 			fmt.Println(err.Error())
 			return
 		}

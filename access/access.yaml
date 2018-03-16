@@ -1,1 +1,3 @@
-addr:
+server:
+ proto: "tcp"
+ addr: ":11000"

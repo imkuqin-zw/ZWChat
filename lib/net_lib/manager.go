@@ -1,4 +1,4 @@
-package lib
+package net_lib
 
 import (
 	"sync"
@@ -27,8 +27,8 @@ func NewManager() *Manager {
 	return manager
 }
 
-func (manager *Manager) NewSession(conn net.Conn, sendChanSize int) *Session {
-	session := newSession(manager, conn, sendChanSize)
+func (manager *Manager) NewSession(conn net.Conn, codec Codec, sendChanSize int) *Session {
+	session := newSession(manager, conn, codec, sendChanSize)
 	manager.putSession(session)
 	return session
 }

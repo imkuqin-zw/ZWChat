@@ -1,4 +1,4 @@
-package lib
+package net_lib
 
 import (
 	"net"
@@ -10,13 +10,15 @@ import (
 type Server struct {
 	manager	*Manager
 	listener net.Listener
+	codec Codec
 	sendChannelSize	int
 }
 
-func NewServer(l net.Listener, sendChannelSize int) *Server {
+func NewServer(l net.Listener, codec Codec, sendChannelSize int) *Server {
 	return &Server{
 		listener: l,
 		manager: NewManager(),
+		codec: codec,
 		sendChannelSize: sendChannelSize,
 	}
 }
@@ -49,7 +51,7 @@ func (server *Server) Accept() (*Session, error) {
 			}
 			return nil, err
 		}
-		return server.manager.NewSession(conn, server.sendChannelSize), nil
+		return server.manager.NewSession(conn, server.codec, server.sendChannelSize), nil
 	}
 }
 
@@ -58,10 +60,10 @@ func (server *Server) Stop() {
 	server.manager.Dispose()
 }
 
-func Serve(network, address string, sendChanSize int) (*Server, error) {
+func Serve(network, address string, codec Codec, sendChanSize int) (*Server, error) {
 	listener, err := net.Listen(network, address)
 	if err != nil {
 		return nil, err
 	}
-	return NewServer(listener, sendChanSize), nil
+	return NewServer(listener, codec, sendChanSize), nil
 }

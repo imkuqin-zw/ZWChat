@@ -37,7 +37,7 @@ func (manager *Manager) Dispose() {
 	manager.disposeOnce.Do(func() {
 		manager.disposeFlag = true
 		for i := 0; i < sessionMapNum; i++ {
-			smap := manager.sessionMaps[i]
+			smap := &manager.sessionMaps[i]
 			smap.Lock()
 			for _, session := range smap.sessions {
 				session.Close()
@@ -57,7 +57,7 @@ func (manager *Manager) GetSession(sessionId uint64) *Session {
 }
 
 func (manager *Manager) putSession(session *Session) {
-	smap := manager.sessionMaps[session.id % sessionMapNum]
+	smap := &manager.sessionMaps[session.id % sessionMapNum]
 	smap.Lock()
 	defer smap.Unlock()
 	smap.sessions[session.id] = session
@@ -68,7 +68,7 @@ func (manager *Manager) delSession(session *Session) {
 	if manager.disposeFlag == true {
 		manager.disposeWait.Done()
 	}
-	smap := manager.sessionMaps[session.id % sessionMapNum]
+	smap := &manager.sessionMaps[session.id % sessionMapNum]
 	smap.Lock()
 	defer smap.Unlock()
 	delete(smap.sessions, session.id)

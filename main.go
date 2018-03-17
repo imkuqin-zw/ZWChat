@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"github.com/imkuqin-zw/ZWChat/protobuf"
-	"github.com/micro/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 )
 
 func main()  {

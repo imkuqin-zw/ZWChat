@@ -8,6 +8,7 @@ import (
 )
 
 var SessionClosedErr = fmt.Errorf("[session] Session Closed")
+var SessionBlockedError = fmt.Errorf("[session] Session Blocked")
 
 var globalSessionId uint64
 
@@ -74,4 +75,28 @@ func (session *Session) Close() error {
 func (session *Session) Receive() (buf []byte, err error) {
 	buf, err = session.codec.UnPack(session.conn)
 	return
+}
+
+func (session *Session) Send(msg interface{}) error {
+	if session.IsClosed() {
+		return SessionClosedErr
+	}
+	buf, err := session.codec.Packet(msg)
+	if err != nil {
+		return err
+	}
+	if session.sendChan == nil {
+		_, err = session.conn.Write(buf)
+		return err
+	}
+	select {
+	case session.sendChan <- msg:
+		return nil
+	default:
+		return SessionClosedErr
+	}
+}
+
+func (session *Session) IsClosed() bool {
+	return atomic.LoadInt32(&session.closeFlag) == 1
 }

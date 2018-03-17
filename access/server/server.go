@@ -3,6 +3,11 @@ package server
 import (
 	"github.com/imkuqin-zw/ZWChat/lib/net_lib"
 	"github.com/golang/glog"
+	"github.com/imkuqin-zw/ZWChat/access/client"
+	"github.com/imkuqin-zw/ZWChat/access/rpc"
+	"github.com/imkuqin-zw/ZWChat/common/protobuf"
+	"github.com/golang/protobuf/proto"
+	"github.com/imkuqin-zw/ZWChat/common/ecode"
 )
 
 type Server struct {
@@ -14,13 +19,40 @@ func New() (s *Server) {
 	return
 }
 
-func (s Server) Loop() {
+func (s *Server) Loop(rpcClient *rpc.RPCClient) {
 	for {
 		session, err := s.Server.Accept()
 		if err != nil {
 			glog.Error(err)
 			continue
 		}
+		c := client.New(session, rpcClient)
 		go s.sessionLoop(c)
+	}
+}
+
+func (s *Server) sessionLoop(client *client.Client) {
+	for {
+		reqData, err := client.Session.Receive()
+		if err != nil {
+			glog.Error(err)
+		}
+		if reqData != nil {
+			baseCMD := &protobuf.Cmd{}
+			if err = proto.Unmarshal(reqData, baseCMD); err != nil {
+				if err = client.Session.Send(&protobuf.Error{
+					Cmd: baseCMD.Cmd,
+					ErrCoed: ecode.ServerErr.Uint32(),
+					ErrMsg: ecode.ServerErr.String(),
+				}); err != nil {
+					glog.Error(err)
+				}
+				continue
+			}
+			if err = client.Parse(baseCMD.Cmd, reqData); err != nil {
+				glog.Error(err)
+				continue
+			}
+		}
 	}
 }

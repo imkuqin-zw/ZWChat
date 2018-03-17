@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package protobuf;
+
+message Cmd {
+    uint32 cmd = 1;
+}

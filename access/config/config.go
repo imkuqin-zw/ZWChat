@@ -5,6 +5,8 @@ import (
 	"flag"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"path/filepath"
+	"os"
 )
 
 var (
@@ -14,6 +16,8 @@ var (
 
 type Config struct {
 	Server *commconf.Server
+	Path   *commconf.Path
+	Log    *commconf.Log
 }
 
 func init()  {
@@ -27,6 +31,13 @@ func Init() (err error) {
 		return
 	}
 	Conf = &Config{}
-	err = yaml.Unmarshal(configBody, Conf)
+	if err = yaml.Unmarshal(configBody, Conf); err != nil {
+		return
+	}
+	Conf.Path = &commconf.Path{}
+	Conf.Path.Root, err = filepath.Abs(filepath.Dir(os.Args[0]))
+	if err != nil {
+		return
+	}
 	return
 }

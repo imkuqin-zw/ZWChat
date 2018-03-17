@@ -1,3 +1,7 @@
 server:
  proto: "tcp"
  addr: ":11000"
+
+log:
+ alsologtostderr: "true"
+ logdir: "log"

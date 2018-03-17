@@ -13,10 +13,6 @@ import (
 func main()  {
 	var err error
 	flag.Parse()
-	if err = config.Init(); err != nil {
-		glog.Error("config.Init error", err)
-		panic(err)
-	}
 	accessServer := server.New()
 	accessServer.Server, err = net_lib.Serve(config.Conf.Server.Proto, config.Conf.Server.Addr, &net_lib.ProtobufCodec{}, 0)
 	if err != nil {
@@ -33,6 +29,10 @@ func main()  {
 }
 
 func init()  {
-	flag.Set("alsologtostderr", "true")
-	flag.Set("log_dir", "false")
+	if err := config.Init(); err != nil {
+		glog.Error("config.Init error", err)
+		panic(err)
+	}
+	flag.Set("alsologtostderr", config.Conf.Log.Alsologtostderr)
+	flag.Set("log_dir", config.Conf.Log.LogDir)
 }

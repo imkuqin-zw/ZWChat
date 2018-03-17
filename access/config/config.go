@@ -26,6 +26,7 @@ func Init() (err error) {
 	if err != nil {
 		return
 	}
+	Conf = &Config{}
 	err = yaml.Unmarshal(configBody, Conf)
 	return
 }

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"github.com/golang/glog"
 	"github.com/imkuqin-zw/ZWChat/lib/net_lib"
+	"github.com/imkuqin-zw/ZWChat/access/rpc"
 )
 
 func main()  {
@@ -17,10 +18,21 @@ func main()  {
 		panic(err)
 	}
 	accessServer := server.New()
-	accessServer.Server, err = net_lib.Serve(config.Config.Server.Proto, config.Config.Server.Addr, &net_lib.ProtobufCodec{}, 0)
+	accessServer.Server, err = net_lib.Serve(config.Conf.Server.Proto, config.Conf.Server.Addr, &net_lib.ProtobufCodec{}, 0)
 	if err != nil {
 		glog.Error(err)
 		panic(err)
 	}
-	accessServer.
+	rpcClient, err := rpc.NewRPCClient()
+	if err != nil {
+		glog.Error(err)
+		panic(err)
+	}
+	glog.Infof("%v %v", config.Conf.Server.Proto, config.Conf.Server.Addr)
+	accessServer.Loop(rpcClient)
+}
+
+func init()  {
+	flag.Set("alsologtostderr", "true")
+	flag.Set("log_dir", "false")
 }

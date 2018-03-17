@@ -22,7 +22,7 @@ type Session struct {
 	sendChan	chan interface{}
 }
 
-func NewSession(conn *net.Conn, codec Codec, sendChanSize int) *Session {
+func NewSession(conn net.Conn, codec Codec, sendChanSize int) *Session {
 	return newSession(nil, conn, codec, sendChanSize)
 }
 

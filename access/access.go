@@ -8,6 +8,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/imkuqin-zw/ZWChat/lib/net_lib"
 	"github.com/imkuqin-zw/ZWChat/access/rpc"
+	"github.com/imkuqin-zw/ZWChat/lib/service_discovery/etcd"
 )
 
 func main()  {
@@ -35,4 +36,6 @@ func init()  {
 	}
 	flag.Set("alsologtostderr", config.Conf.Log.Alsologtostderr)
 	flag.Set("log_dir", config.Conf.Log.LogDir)
+	etcd.DialTimeout = config.Conf.Etcd.DialTimeout
+	etcd.Prefix = config.Conf.Etcd.Prefix
 }

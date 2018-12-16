@@ -1,40 +1,58 @@
 package net_lib
 
 import (
-	"net"
-	"github.com/micro/protobuf/proto"
+	"github.com/golang/protobuf/proto"
+	"github.com/imkuqin-zw/ZWChat/common/logger"
+	"go.uber.org/zap"
+	"encoding/base64"
+	"bufio"
 )
 
-type Codec interface{
-	Packet(src interface{}) ([]byte, error)
-	UnPack(conn net.Conn) ([]byte, error)
+var DefaultCode = ProtoCodeInstance
+
+var ProtoCodeInstance = new(ProtoTcpCode)
+
+type Codec interface {
+	Packet(src interface{}, shareKeyId, shareKey []byte) ([]byte)
+	UnPack(conn *bufio.Reader) ([]byte, error)
 }
 
-type ProtobufCodec struct {
+type ProtoTcpCode struct{}
 
-}
-
-func (codec *ProtobufCodec) Packet(msg interface{}) ([]byte, error) {
+func (codec *ProtoTcpCode) Packet(msg interface{}, authKeyId, shareKey []byte) ([]byte) {
 	body, err := proto.Marshal(msg.(proto.Message))
 	if err != nil {
-		return nil, err
+		logger.Error("Proto Packet Marshal err: ", zap.Error(err))
+		return nil
 	}
-	lens := len(body)
-	buf := make([]byte, 5 + lens)
-	buf[0] = '0'
-	buf[1] = byte(uint32(lens))
-	buf[2] = byte(uint32(lens) >> 8)
-	buf[3] = byte(uint32(lens) >> 16)
-	buf[4] = byte(uint32(lens) >> 24)
-	copy(buf[5:], msg.([]byte))
-	return buf, nil
+	result := new(Writer)
+	if len(shareKey) == 0 { // 不加密
+		result.WriteUint32(24 + uint32(len(body)))
+		result.Write(authKeyId, make([]byte, 16), body)
+	} else { // 加密
+		var key, iv []byte
+		msgKey := DeriveMsgKey(shareKey, body)
+		logger.Debug("Proto Packet: ", zap.String("msgKey", base64.StdEncoding.EncodeToString(msgKey)))
+		DeriveAESKey(shareKey, msgKey, key, iv)
+		logger.Debug("Proto Packet: ", zap.String("AESKey", base64.StdEncoding.EncodeToString(key)))
+		logger.Debug("Proto Packet: ", zap.String("IV", base64.StdEncoding.EncodeToString(iv)))
+		enBytes, err := AESCBCPadEncrypt(nil, body, key, iv)
+		if err != nil {
+			logger.Error("Proto Packet encrypt err: ", zap.Error(err))
+			return nil
+		}
+		result.WriteUint32(24 + uint32(len(enBytes)))
+		result.Write(authKeyId, msgKey, enBytes)
+	}
+	return result.Bytes()
 }
 
-func (codec *ProtobufCodec) UnPack(conn net.Conn) ([]byte, error) {
-	var buf = make([]byte,5)
-	_, err := conn.Read(buf[0:5])
+func (codec *ProtoTcpCode) UnPack(conn *bufio.Reader) ([]byte) {
+	var buf = make([]byte, 4)
+	_, err := conn.Read(buf[0:4])
 	if err != nil {
-		return nil, err
+		logger.Error("Proto UnPack getLen err: ", zap.Error(err))
+		return nil
 	}
 	lens := int(uint32(buf[1]) | uint32(buf[2])<<8 | uint32(buf[3])<<16 | uint32(buf[4])<<24)
 	buf = make([]byte, lens)

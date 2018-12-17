@@ -1,13 +1,14 @@
 package net_lib
 
 import (
-	"crypto/aes"
-	"errors"
 	"bytes"
+	"crypto/aes"
 	"crypto/cipher"
+	"crypto/sha256"
+	"errors"
 	"github.com/imkuqin-zw/ZWChat/common/logger"
 	"go.uber.org/zap"
-	"crypto/sha256"
+	"math/big"
 )
 
 func deriveAuthKey(shareKey []byte) []byte {
@@ -59,7 +60,6 @@ func DeriveAESKey(shareKey, msgKey []byte, key, iv []byte) {
 	copy(iv[8:24], a[8:24])
 	copy(iv[24:32], b[24:32])
 }
-
 
 //AES CBC 模式加密
 func AESCBCPadEncrypt(dst, src, key, iv []byte) ([]byte, error) {
@@ -133,8 +133,15 @@ func PKCS5UnPadding(origData []byte, blockSize int) ([]byte, error) {
 	length := len(origData)
 	paddingLen := int(origData[length-1])
 	if paddingLen >= length {
-		logger.Debug("origData len: ", length, " blockSize: ", blockSize)
+		logger.Debug("origData: ", zap.Int("length", length), zap.Int("blockSize", blockSize))
 		return nil, errors.New("padding size error")
 	}
 	return origData[:length-paddingLen], nil
+}
+
+//4字节倍数的数组是否为0
+func IsBytesAllZero(x []byte) bool {
+	xBigInt := big.NewInt(0).SetBytes(x)
+	zeroBigInt := big.NewInt(0)
+	return xBigInt.Cmp(zeroBigInt) == 0
 }

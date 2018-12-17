@@ -1,15 +1,14 @@
 package server
 
 import (
-	"github.com/imkuqin-zw/ZWChat/lib/net_lib"
 	"github.com/golang/glog"
+	"github.com/golang/protobuf/proto"
 	"github.com/imkuqin-zw/ZWChat/access/client"
 	"github.com/imkuqin-zw/ZWChat/access/rpc"
-	"github.com/imkuqin-zw/ZWChat/common/protobuf"
-	"github.com/golang/protobuf/proto"
 	"github.com/imkuqin-zw/ZWChat/common/ecode"
+	"github.com/imkuqin-zw/ZWChat/common/protobuf"
+	"github.com/imkuqin-zw/ZWChat/lib/net_lib"
 )
-
 
 type Server struct {
 	Server *net_lib.Server
@@ -42,15 +41,15 @@ func (s *Server) sessionLoop(client *client.Client) {
 			baseCMD := &protobuf.Cmd{}
 			if err = proto.Unmarshal(reqData, baseCMD); err != nil {
 				if err = client.Session.Send(&protobuf.Error{
-					Cmd: baseCMD.Cmd,
+					Cmd:     baseCMD.Cmd,
 					ErrCoed: ecode.ServerErr.Uint32(),
-					ErrMsg: ecode.ServerErr.String(),
+					ErrMsg:  ecode.ServerErr.String(),
 				}); err != nil {
 					glog.Error(err)
 				}
 				continue
 			}
-			if err = client.Parse(baseCMD.Cmd, reqData); err != nil {
+			if err = client.Parmse(baseCMD.Cmd, reqData); err != nil {
 				glog.Error(err)
 				continue
 			}

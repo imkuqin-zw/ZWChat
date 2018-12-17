@@ -1,12 +1,12 @@
 package net_lib
 
 import (
-	"net"
-	"sync/atomic"
-	"fmt"
 	"bufio"
+	"fmt"
 	"github.com/imkuqin-zw/ZWChat/common/logger"
 	"go.uber.org/zap"
+	"net"
+	"sync/atomic"
 )
 
 var SessionClosedErr = fmt.Errorf("[session] Session Closed")
@@ -15,10 +15,10 @@ var SessionBlockedError = fmt.Errorf("[session] Session Blocked")
 var globalSessionId uint64
 
 type SessionCfg struct {
-	ReadDeadLine           int //读数据限制的秒数
-	WriteDeadLine          int //写数据限制的秒数
-	AllowMaxReadBytePerSec int //每秒允许读取最大的字节数
-	MaxMessageSize         int //单条消息的最大字节数
+	ReadDeadLine           int    //读数据限制的秒数
+	WriteDeadLine          int    //写数据限制的秒数
+	AllowMaxReadBytePerSec int    //每秒允许读取最大的字节数
+	MaxMessageSize         uint32 //单条消息的最大字节数
 }
 
 type Session struct {
@@ -62,11 +62,13 @@ func (session *Session) sendLoop() {
 	for {
 		select {
 		case msg := <-session.sendChan:
-			buf := session.codec.Packet(msg, session.shareKeyId, session.shareKey)
-			if buf != nil {
-				if session.Write(buf) != nil {
-					return
-				}
+			buf, err := session.codec.Packet(msg, session.shareKeyId, session.shareKey)
+			if err != nil {
+				return
+			}
+			if err = session.Write(buf); err != nil {
+				logger.Error("session.Write error: ", zap.Error(err))
+				return
 			}
 		case <-session.closeChan:
 			return
@@ -87,7 +89,7 @@ func (session *Session) Close() error {
 }
 
 func (session *Session) Receive() (buf []byte, err error) {
-	buf, err = session.codec.UnPack(session.r)
+	buf, err = session.codec.UnPack(session)
 	return
 }
 
@@ -109,9 +111,13 @@ func (session *Session) Send(msg interface{}) error {
 		return SessionClosedErr
 	}
 	if session.sendChan == nil {
-		buf := session.codec.Packet(msg, session.shareKeyId, session.shareKey)
-		if buf != nil {
-			return session.Write(buf)
+		buf, err := session.codec.Packet(msg, session.shareKeyId, session.shareKey)
+		if err != nil {
+			return err
+		}
+		if err = session.Write(buf); err != nil {
+			logger.Error("session.Write error: ", zap.Error(err))
+			return err
 		}
 	}
 	select {

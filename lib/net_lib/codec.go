@@ -2,9 +2,7 @@ package net_lib
 
 import (
 	"encoding/base64"
-	"encoding/binary"
 	"github.com/golang/protobuf/proto"
-	"github.com/henrylee2cn/pholcus/common/session"
 	"github.com/imkuqin-zw/ZWChat/common/logger"
 	"github.com/kataras/go-errors"
 	"go.uber.org/zap"
@@ -42,6 +40,41 @@ func (codec *ProtoTcpCode) Packet(msg interface{}, authKeyId, shareKey []byte) (
 	return result.Bytes(), nil
 }
 
+func (codec *ProtoTcpCode) UnPack(session *Session) ([]byte, error) {
+	length, err := codec.getDataLen(session.r)
+	if err != nil {
+		logger.Error("Proto UnPack getDataLen err: ", zap.Error(err))
+		return nil, err
+	}
+	if length <= 28 || length < session.cfg.MaxMsgSize {
+		logger.Error("Proto UnPack length error:", zap.Uint32("length", length))
+		return nil, DataLenErr
+	}
+	authKey, err := codec.getAuthKeyId(session)
+	if err != nil {
+		return nil, err
+	}
+	msgKey, err := codec.getMsgKey(session.r)
+	if err != nil {
+		return nil, err
+	}
+	data, err := codec.getData(session.r, length-24)
+	if err != nil {
+		return nil, err
+	}
+	var result []byte
+	if msgKey == nil {
+
+	} else {
+		shareKey := session.GetShareKey(authKey)
+		result, err = codec.decrypt(shareKey, msgKey, data)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
 func (codec *ProtoTcpCode) encrypt(shareKey, data []byte) ([]byte, []byte, error) {
 	var key, iv []byte
 	msgKey := DeriveMsgKey(shareKey, data)
@@ -58,55 +91,42 @@ func (codec *ProtoTcpCode) encrypt(shareKey, data []byte) ([]byte, []byte, error
 	return msgKey, enBytes, nil
 }
 
-func (codec *ProtoTcpCode) UnPack(session *Session) ([]byte, error) {
-	length, err := codec.getDataLen(session)
+func (Codec *ProtoTcpCode) decrypt(shareKey, msgKey, data []byte) ([]byte, error) {
+	var key, iv []byte
+	DeriveAESKey(shareKey, msgKey, key, iv)
+	result, err := AESCBCDecrypt(nil, data, key, iv)
 	if err != nil {
-		logger.Error("Proto UnPack get length err: ", zap.Error(err))
+		logger.Error("Proto decrypt err: ", zap.Error(err))
 		return nil, err
 	}
-	if length <= uint32(28) || length < session.cfg.MaxMessageSize {
-		logger.Error("Proto UnPack length error:", zap.Uint32("length", length))
-		return nil, DataLenErr
-	}
-	if err = codec.getAuthKeyId(session); err != nil {
-		return nil, err
-	}
+	return result, nil
+}
 
-	msgKey, err := codec.getMsgKey(session)
+func (codec *ProtoTcpCode) getData(r *Reader, length uint32) ([]byte, error) {
+	buf, err := r.ReadN(length)
 	if err != nil {
+		logger.Error("Proto getData err: ", zap.Error(err))
 		return nil, err
 	}
-	if msgKey == nil {
-
-	} else {
-
-	}
-	//buf := make([]byte, length)
-	//if _, err = session.r.Read(buf[0:length]); err != nil {
-	//	logger.Error("Proto UnPack get data err: ", zap.Error(err))
-	//	return nil, err
-	//}
-
 	return buf, nil
 }
 
-func (Codec *ProtoTcpCode) getData()
-
-func (codec *ProtoTcpCode) getAuthKeyId(session *Session) error {
-	buf := make([]byte, 8)
-	if _, err := session.r.Read(buf[0:8]); err != nil {
+func (codec *ProtoTcpCode) getAuthKeyId(session *Session) ([]byte, error) {
+	buf, err := session.r.ReadN(8)
+	if err != nil {
 		logger.Error("Proto getAuthKeyId err: ", zap.Error(err))
-		return err
+		return nil, err
 	}
 	if !IsBytesAllZero(buf) {
-		session.shareKey = buf
+		session.SetShareKeyId(buf)
+		return buf, nil
 	}
-	return nil
+	return nil, nil
 }
 
-func (codec *ProtoTcpCode) getMsgKey(session *Session) ([]byte, error) {
-	buf := make([]byte, 16)
-	if _, err := session.r.Read(buf[0:16]); err != nil {
+func (codec *ProtoTcpCode) getMsgKey(r *Reader) ([]byte, error) {
+	buf, err := r.ReadN(16)
+	if err != nil {
 		logger.Error("Proto getAuthKeyId err: ", zap.Error(err))
 		return nil, err
 	}
@@ -116,11 +136,6 @@ func (codec *ProtoTcpCode) getMsgKey(session *Session) ([]byte, error) {
 	return nil, nil
 }
 
-func (codec *ProtoTcpCode) getDataLen(session *Session) (uint32, error) {
-	var buf = make([]byte, 4)
-	_, err := session.r.Read(buf[0:4])
-	if err != nil {
-		return 0, err
-	}
-	return binary.LittleEndian.Uint32(buf), nil
+func (codec *ProtoTcpCode) getDataLen(r *Reader) (uint32, error) {
+	return r.ReadUint32()
 }

@@ -1,8 +1,8 @@
 package net_lib
 
 import (
-	"sync"
 	"net"
+	"sync"
 )
 
 const sessionMapNum = 32
@@ -28,8 +28,8 @@ func NewManager() *Manager {
 	return manager
 }
 
-func (manager *Manager) NewSession(conn net.Conn, defaultCodec Codec, sendChanSize int) *Session {
-	session := newSession(manager, conn, defaultCodec, sendChanSize)
+func (manager *Manager) NewSession(conn net.Conn, defaultCodec Codec, sendChanSize int, cfg SessionCfg) *Session {
+	session := newSession(manager, conn, defaultCodec, sendChanSize, cfg)
 	manager.putSession(session)
 	return session
 }
@@ -39,6 +39,12 @@ func (manager *Manager) Dispose() {
 		manager.disposeFlag = true
 		for i := 0; i < sessionMapNum; i++ {
 			smap := &manager.sessionMaps[i]
+			smap.Lock()
+			for _, session := range smap.sessions {
+				session.Close()
+			}
+			smap.Unlock()
+			smap = &manager.loginSessionMaps[i]
 			smap.Lock()
 			for _, session := range smap.sessions {
 				session.Close()

@@ -8,6 +8,7 @@ import (
 	"github.com/imkuqin-zw/ZWChat/common/ecode"
 	"github.com/imkuqin-zw/ZWChat/common/protobuf"
 	"github.com/imkuqin-zw/ZWChat/lib/net_lib"
+	"github.com/imkuqin-zw/tool/algorithm"
 )
 
 type Server struct {

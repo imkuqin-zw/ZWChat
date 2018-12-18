@@ -1,24 +1,25 @@
 package net_lib
 
 import (
-	"net"
-	"time"
 	"io"
+	"net"
 	"strings"
+	"time"
 )
 
 type Server struct {
-	manager	*Manager
-	listener net.Listener
-	defaultCode Codec
-	sendChannelSize	int
+	manager         *Manager
+	listener        net.Listener
+	defaultCode     Codec
+	sendChannelSize int
+	sessionCfg      *SessionCfg
 }
 
 func NewServer(l net.Listener, sendChannelSize int) *Server {
 	return &Server{
-		listener: l,
-		manager: NewManager(),
-		defaultCode: DefaultCode,
+		listener:        l,
+		manager:         NewManager(),
+		defaultCode:     DefaultCode,
 		sendChannelSize: sendChannelSize,
 	}
 }
@@ -51,7 +52,7 @@ func (server *Server) Accept() (*Session, error) {
 			}
 			return nil, err
 		}
-		return server.manager.NewSession(conn, server.defaultCode, server.sendChannelSize), nil
+		return server.manager.NewSession(conn, server.defaultCode, server.sendChannelSize, *server.sessionCfg), nil
 	}
 }
 

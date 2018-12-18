@@ -62,10 +62,8 @@ func (codec *ProtoTcpCode) UnPack(session *Session) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var result []byte
-	if msgKey == nil {
-
-	} else {
+	var result = data
+	if msgKey != nil {
 		shareKey := session.GetShareKey(authKey)
 		result, err = codec.decrypt(shareKey, msgKey, data)
 		if err != nil {

@@ -13,6 +13,10 @@ func NewReader(reader *bufio.Reader) *Reader {
 	return &Reader{r: reader}
 }
 
+func (r *Reader) Peek(n int) ([]byte, error) {
+	return r.r.Peek(n)
+}
+
 func (r *Reader) Read(data []byte) error {
 	var tempNum, readLen, total = 0, 0, len(data)
 	var err error

@@ -8,11 +8,15 @@ import (
 const sessionMapNum = 32
 
 type Manager struct {
-	sessionMaps      [sessionMapNum]sessionMap //未登录的连接
-	loginSessionMaps [sessionMapNum]sessionMap //登陆后的连接
+	sessionMaps      [sessionMapNum]sessionMap      //未登录的连接
+	loginSessionMaps [sessionMapNum]loginSessionMap //登陆后的连接
 	disposeFlag      bool
 	disposeOnce      sync.Once
 	disposeWait      sync.WaitGroup
+}
+type loginSessionMap struct {
+	sessions map[uint64]map[int8]*Session
+	sync.RWMutex
 }
 
 type sessionMap struct {
@@ -24,6 +28,7 @@ func NewManager() *Manager {
 	manager := &Manager{}
 	for i := 0; i < sessionMapNum; i++ {
 		manager.sessionMaps[i].sessions = make(map[uint64]*Session)
+		manager.loginSessionMaps[i].sessions = make(map[uint64]map[int8]*Session)
 	}
 	return manager
 }
@@ -44,12 +49,14 @@ func (manager *Manager) Dispose() {
 				session.Close()
 			}
 			smap.Unlock()
-			smap = &manager.loginSessionMaps[i]
-			smap.Lock()
-			for _, session := range smap.sessions {
-				session.Close()
+			lsMap := &manager.loginSessionMaps[i]
+			lsMap.Lock()
+			for _, userSessionMap := range lsMap.sessions {
+				for _, session := range userSessionMap {
+					session.Close()
+				}
 			}
-			smap.Unlock()
+			lsMap.Unlock()
 		}
 		manager.disposeWait.Wait()
 	})
@@ -71,7 +78,7 @@ func (manager *Manager) putSession(session *Session) {
 	manager.disposeWait.Add(1)
 }
 
-func (manager *Manager) GetSessionByUid(uid uint64) *Session {
+func (manager *Manager) GetSessionMapByUid(uid uint64) map[int8]*Session {
 	smap := &manager.loginSessionMaps[uid%sessionMapNum]
 	smap.RLock()
 	defer smap.RUnlock()
@@ -84,10 +91,15 @@ func (manager *Manager) putLoginSession(session *Session) {
 	smap.Lock()
 	defer smap.Unlock()
 	delete(smap.sessions, session.id)
-	smap = &manager.loginSessionMaps[session.userId%sessionMapNum]
-	smap.Lock()
-	defer smap.Unlock()
-	smap.sessions[session.userId] = session
+	lsmap := &manager.loginSessionMaps[session.userId%sessionMapNum]
+	lsmap.Lock()
+	defer lsmap.Unlock()
+	if lsmap.sessions[session.userId] == nil {
+		userSessionMap :=  map[int8]*Session{session.connType: session}
+		lsmap.sessions[session.userId] = userSessionMap
+	} else {
+		lsmap.sessions[session.userId][session.connType] = session
+	}
 	manager.disposeWait.Add(1)
 }
 

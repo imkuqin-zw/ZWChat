@@ -6,14 +6,20 @@ import (
 	"github.com/imkuqin-zw/ZWChat/common/logger"
 	"go.uber.org/zap"
 	"net"
-	"sync/atomic"
 	"time"
+	"sync/atomic"
 )
 
 var SessionClosedErr = fmt.Errorf("[session] Session Closed")
 var SessionBlockedError = fmt.Errorf("[session] Session Blocked")
 
 var globalSessionId uint64
+
+const (
+	TCP  = iota
+	HTTP
+	WS
+)
 
 type SessionCfg struct {
 	ReadDeadLine  int //读数据限制的秒数
@@ -39,11 +45,8 @@ type Session struct {
 	shareKeyId []byte
 	shareKey   []byte
 	cfg        SessionCfg
+	connType   int8 //连接类型
 }
-
-//func NewSession(conn net.Conn, codec Codec, sendChanSize int, cfg SessionCfg) *Session {
-//	return newSession(nil, conn, codec, sendChanSize, cfg)
-//}
 
 func newSession(manager *Manager, conn net.Conn, defaultCode Codec, sendChanSize int, cfg SessionCfg) *Session {
 	session := &Session{
@@ -60,6 +63,18 @@ func newSession(manager *Manager, conn net.Conn, defaultCode Codec, sendChanSize
 		go session.sendLoop()
 	}
 	return session
+}
+
+func (session *Session) SetCodec(codec Codec) {
+	session.codec = codec
+}
+
+func (session *Session) SetConnType(connType int8) {
+	session.connType = connType
+}
+
+func (session *Session) GetConnType() int8 {
+	return session.connType
 }
 
 func (session *Session) SetShareKeyId(shareKeyId []byte) {
@@ -87,7 +102,7 @@ func (session *Session) sendLoop() {
 	for {
 		select {
 		case msg := <-session.sendChan:
-			buf, err := session.codec.Packet(msg, session.shareKeyId, session.shareKey)
+			buf, err := session.codec.Packet(msg, session)
 			if err != nil {
 				return
 			}
@@ -118,6 +133,39 @@ func (session *Session) Close() error {
 		return err
 	}
 	return SessionClosedErr
+}
+
+func (session *Session) IsHttp() (bool, error) {
+	if session.cfg.ReadDeadLine > 0 {
+		deadTime := time.Now().Add(time.Second * time.Duration(session.cfg.ReadDeadLine))
+		session.conn.SetReadDeadline(deadTime)
+	}
+	b, err := IsHttp(session.r)
+	if err != nil {
+		logger.Error("session IsHttp err: ", zap.Error(err))
+		return false, err
+	}
+	if session.cfg.ReadDeadLine > 0 {
+		session.conn.SetReadDeadline(time.Time{})
+	}
+	return b, nil
+}
+
+func (session *Session) InitCodec() error {
+	b, err := session.IsHttp()
+	if err != nil {
+		logger.Error("Server InitCodec err: ", zap.Error(err))
+		return err
+	}
+	if b {
+		session.SetConnType(HTTP)
+		session.SetCodec(ProtoHttp)
+
+	} else {
+		session.SetConnType(TCP)
+		session.SetCodec(ProtoTcp)
+	}
+	return nil
 }
 
 func (session *Session) Receive() (buf []byte, err error) {

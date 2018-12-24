@@ -169,21 +169,14 @@ func (session *Session) InitCodec() error {
 }
 
 func (session *Session) Receive() (buf []byte, err error) {
-	if session.cfg.ReadDeadLine > 0 {
-		deadTime := time.Now().Add(time.Second * time.Duration(session.cfg.ReadDeadLine))
-		session.conn.SetReadDeadline(deadTime)
-	}
-	buf, err = session.codec.UnPack(session)
-	if err != nil {
-		return nil, err
-	}
-	if session.cfg.ReadDeadLine > 0 {
-		session.conn.SetReadDeadline(time.Time{})
-	}
-	return
+	return session.codec.UnPack(session)
 }
 
 func (session *Session) Write(buf []byte) (err error) {
+	if session.cfg.WriteDeadLine > 0 {
+		deadTime := time.Now().Add(time.Second * time.Duration(session.cfg.WriteDeadLine))
+		session.conn.SetWriteDeadline(deadTime)
+	}
 	var onceWriteLen, writtenLen, totalLen = 0, 0, len(buf)
 	for writtenLen < totalLen {
 		onceWriteLen, err = session.conn.Write(buf[writtenLen:])
@@ -193,6 +186,9 @@ func (session *Session) Write(buf []byte) (err error) {
 		}
 		writtenLen += onceWriteLen
 	}
+	if session.cfg.WriteDeadLine > 0 {
+		session.conn.SetWriteDeadline(time.Time{})
+	}
 	return nil
 }
 
@@ -201,7 +197,7 @@ func (session *Session) Send(msg interface{}) error {
 		return SessionClosedErr
 	}
 	if session.sendChan == nil {
-		buf, err := session.codec.Packet(msg, session.shareKeyId, session.shareKey)
+		buf, err := session.codec.Packet(msg, session)
 		if err != nil {
 			return err
 		}

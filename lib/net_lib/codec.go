@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"io/ioutil"
+	"time"
 )
 
 var ProtoTcp = new(ProtoTcpCode)
@@ -73,6 +74,10 @@ func (codec *ProtoTcpCode) Packet(msg interface{}, session *Session) ([]byte, er
 }
 
 func (codec *ProtoTcpCode) UnPack(session *Session) ([]byte, error) {
+	if session.cfg.ReadDeadLine > 0 {
+		deadTime := time.Now().Add(time.Second * time.Duration(session.cfg.ReadDeadLine))
+		session.conn.SetReadDeadline(deadTime)
+	}
 	length, err := codec.getDataLen(session.r)
 	if err != nil {
 		logger.Error("Proto UnPack getDataLen err: ", zap.Error(err))
@@ -93,6 +98,9 @@ func (codec *ProtoTcpCode) UnPack(session *Session) ([]byte, error) {
 	data, err := codec.getData(session.r, length-24)
 	if err != nil {
 		return nil, err
+	}
+	if session.cfg.ReadDeadLine > 0 {
+		session.conn.SetReadDeadline(time.Time{})
 	}
 	var result = data
 	if msgKey != nil {
@@ -210,21 +218,6 @@ func (codec *ProtoHttpCode) Packet(msg interface{}, session *Session) ([]byte, e
 		logger.Error("Proto Packet Marshal err: ", zap.Error(err))
 		return nil, err
 	}
-	w := &response{
-		conn:          c,
-		cancelCtx:     cancelCtx,
-		req:           req,
-		reqBody:       req.Body,
-		handlerHeader: make(Header),
-		contentLength: -1,
-		closeNotifyCh: make(chan bool, 1),
-
-		// We populate these ahead of time so we're not
-		// reading from req.Header after their Handler starts
-		// and maybe mutates it (Issue 14940)
-		wants10KeepAlive: req.wantsHttp10KeepAlive(),
-		wantsClose:       req.wantsClose(),
-	}
 	result := new(Writer)
 	if len(shareKey) == 0 { // 不加密
 		result.WriteUint32(24 + uint32(len(body)))
@@ -241,12 +234,19 @@ func (codec *ProtoHttpCode) Packet(msg interface{}, session *Session) ([]byte, e
 }
 
 func (codec *ProtoHttpCode) UnPack(session *Session) ([]byte, error) {
+	if session.cfg.ReadDeadLine > 0 {
+		deadTime := time.Now().Add(time.Second * time.Duration(session.cfg.ReadDeadLine))
+		session.conn.SetReadDeadline(deadTime)
+	}
 	r, err := http.ReadRequest(session.r.r)
 	if err != nil {
 		logger.Error("ProtoHttpCode UnPack ReadRequest err: ", zap.Error(err))
 		return nil, err
 	}
 	defer r.Body.Close()
+	if session.cfg.ReadDeadLine > 0 {
+		session.conn.SetReadDeadline(time.Time{})
+	}
 	if IsWs(r.Header) {
 		if err = CheckUpgrade(r.Header); err != nil {
 			logger.Error("ProtoHttpCode UnPack CheckUpgrade err: ", zap.Error(err))
@@ -259,25 +259,20 @@ func (codec *ProtoHttpCode) UnPack(session *Session) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(body)  < 16 {
+	if len(body) < 24 {
 		logger.Error("ProtoHttpCode UnPack err: ", zap.Error(DataLenErr))
 		return nil, DataLenErr
 	}
-	if !IsBytesAllZero(body[:16]) {
-		session.SetShareKeyId(body[:16])
+	authKey := body[:8]
+	if !IsBytesAllZero(authKey) {
+		session.SetShareKeyId(authKey)
 	}
-	msgKey, err := codec.getMsgKey(session.r)
-	if err != nil {
-		return nil, err
-	}
-	data, err := codec.getData(session.r, length-24)
-	if err != nil {
-		return nil, err
-	}
-	var result = data
+	msgKey := body[9:25]
+	data := body[25:]
+	result := data
 	if msgKey != nil {
 		shareKey := session.GetShareKey(authKey)
-		result, err = codec.decrypt(shareKey, msgKey, data)
+		result, err = decrypt(shareKey, msgKey, data)
 		if err != nil {
 			return nil, err
 		}

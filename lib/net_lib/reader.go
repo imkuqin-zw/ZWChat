@@ -23,7 +23,7 @@ func (r *Reader) Read(data []byte) error {
 	readLen, tempNum, total := 0, 0, len(data)
 	var err error
 	for readLen < total && err == nil {
-		tempNum, err = r.r.Read(data)
+		tempNum, err = r.r.Read(data[readLen:total])
 		readLen += tempNum
 	}
 	return nil

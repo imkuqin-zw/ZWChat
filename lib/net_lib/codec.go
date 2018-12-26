@@ -247,14 +247,6 @@ func (codec *ProtoHttpCode) UnPack(session *Session) ([]byte, error) {
 	if session.cfg.ReadDeadLine > 0 {
 		session.conn.SetReadDeadline(time.Time{})
 	}
-	if IsWs(r.Header) {
-		if err = CheckUpgrade(r.Header); err != nil {
-			logger.Error("ProtoHttpCode UnPack CheckUpgrade err: ", zap.Error(err))
-			return nil, err
-		}
-		//TODO 发送升级响应
-		session.Send("")
-	}
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return nil, err

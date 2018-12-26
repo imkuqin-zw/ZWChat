@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 	"sync/atomic"
+	"net/http"
 )
 
 var SessionClosedErr = fmt.Errorf("[session] Session Closed")
@@ -135,32 +136,34 @@ func (session *Session) Close() error {
 	return SessionClosedErr
 }
 
-func (session *Session) IsHttp() (bool, error) {
+func (session *Session) IsHttp() bool {
 	if session.cfg.ReadDeadLine > 0 {
 		deadTime := time.Now().Add(time.Second * time.Duration(session.cfg.ReadDeadLine))
 		session.conn.SetReadDeadline(deadTime)
 	}
-	b, err := IsHttp(session.r)
-	if err != nil {
-		logger.Error("session IsHttp err: ", zap.Error(err))
-		return false, err
-	}
+	b := IsHttp(session.r)
 	if session.cfg.ReadDeadLine > 0 {
 		session.conn.SetReadDeadline(time.Time{})
 	}
-	return b, nil
+	return b
 }
 
 func (session *Session) InitCodec() error {
-	b, err := session.IsHttp()
-	if err != nil {
-		logger.Error("Server InitCodec err: ", zap.Error(err))
-		return err
-	}
-	if b {
-		session.SetConnType(HTTP)
-		session.SetCodec(ProtoHttp)
-
+	if session.IsHttp(){
+		key, b, err := IsWs(session.r, session.cfg.MaxMsgSize)
+		if err != nil {
+			return err
+		}
+		if !b {
+			session.SetConnType(HTTP)
+			session.SetCodec(ProtoHttp)
+		}
+		resp := CreateUpgradeResp(ComputeAcceptedKey(key))
+		if err = session.Write([]byte(resp)); err != nil {
+			return err
+		}
+		session.SetConnType(WS)
+		session.SetCodec(ProtoWs)
 	} else {
 		session.SetConnType(TCP)
 		session.SetCodec(ProtoTcp)

@@ -6,10 +6,11 @@ import (
 )
 
 type Reader struct {
-	r *bufio.Reader
+	r   *bufio.Reader
 }
 
 func NewReader(reader *bufio.Reader) *Reader {
+
 	return &Reader{r: reader}
 }
 
@@ -17,14 +18,15 @@ func (r *Reader) Peek(n int) ([]byte, error) {
 	return r.r.Peek(n)
 }
 
+
 func (r *Reader) Read(data []byte) error {
-	var tempNum, readLen, total = 0, 0, len(data)
+	readLen, tempNum, total := 0, 0, len(data)
 	var err error
 	for readLen < total && err == nil {
 		tempNum, err = r.r.Read(data)
 		readLen += tempNum
 	}
-	return err
+	return nil
 }
 
 func (r *Reader) ReadN(n uint32) ([]byte, error) {

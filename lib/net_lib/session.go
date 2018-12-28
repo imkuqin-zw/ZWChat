@@ -150,20 +150,22 @@ func (session *Session) IsHttp() bool {
 
 func (session *Session) InitCodec() error {
 	if session.IsHttp(){
-		key, b, err := IsWs(session.r, session.cfg.MaxMsgSize)
-		if err != nil {
-			return err
-		}
-		if !b {
+		headers := GetHeader(session.r, session.cfg.MaxMsgSize)
+		if IsWsHandshake(headers) {
+			if err := CheckUpgrade(headers); err != nil {
+				return err
+			}
+			acceptKey := ComputeAcceptedKey(headers["Sec-WebSocket-Key"])
+			resp := CreateUpgradeResp(acceptKey)
+			if err := session.Write([]byte(resp)); err != nil {
+				return err
+			}
+			session.SetConnType(WS)
+			session.SetCodec(ProtoWs)
+		} else {
 			session.SetConnType(HTTP)
 			session.SetCodec(ProtoHttp)
 		}
-		resp := CreateUpgradeResp(ComputeAcceptedKey(key))
-		if err = session.Write([]byte(resp)); err != nil {
-			return err
-		}
-		session.SetConnType(WS)
-		session.SetCodec(ProtoWs)
 	} else {
 		session.SetConnType(TCP)
 		session.SetCodec(ProtoTcp)

@@ -10,14 +10,20 @@ type Reader struct {
 }
 
 func NewReader(reader *bufio.Reader) *Reader {
-
 	return &Reader{r: reader}
+}
+
+func (r *Reader) Buffered(maxSize uint32) int {
+	bufLen := r.r.Buffered()
+	if int(maxSize) > bufLen {
+		return bufLen
+	}
+	return int(maxSize)
 }
 
 func (r *Reader) Peek(n int) ([]byte, error) {
 	return r.r.Peek(n)
 }
-
 
 func (r *Reader) Read(data []byte) error {
 	readLen, tempNum, total := 0, 0, len(data)

@@ -212,7 +212,8 @@ func (codec *ProtoWsCode) UnPack(session *Session) ([]byte, error) {
 type ProtoHttpCode struct{}
 
 func (codec *ProtoHttpCode) Packet(msg interface{}, session *Session) ([]byte, error) {
-
+	authKeyId := session.GetShareKeyId()
+	shareKey := session.GetShareKey(authKeyId)
 	body, err := proto.Marshal(msg.(proto.Message))
 	if err != nil {
 		logger.Error("Proto Packet Marshal err: ", zap.Error(err))
@@ -223,7 +224,7 @@ func (codec *ProtoHttpCode) Packet(msg interface{}, session *Session) ([]byte, e
 		result.WriteUint32(24 + uint32(len(body)))
 		result.Write(authKeyId, make([]byte, 16), body)
 	} else { // 加密
-		msgKey, enBytes, err := codec.encrypt(shareKey, body)
+		msgKey, enBytes, err := encrypt(shareKey, body)
 		if err != nil {
 			return nil, err
 		}

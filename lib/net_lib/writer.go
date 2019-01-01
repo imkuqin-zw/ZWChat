@@ -19,6 +19,9 @@ func NewWriter(in []byte) *Writer {
 func (w *Writer) Bytes() []byte {
 	return w.buf.Bytes()
 }
+func (w *Writer) Len() int {
+	return w.buf.Len()
+}
 
 func (w *Writer) WriteByte(v byte) {
 	w.buf.WriteByte(v)
@@ -52,7 +55,13 @@ func (w *Writer) Write(v ...[]byte) {
 	for _, item := range v {
 		w.buf.Write(item)
 	}
+}
 
+
+func (w *Writer) WriteStrings(v ...string) {
+	for _, item := range v {
+		w.buf.WriteString(item)
+	}
 }
 
 func (w *Writer) ZeroPad(n int) {

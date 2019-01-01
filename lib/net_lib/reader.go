@@ -25,14 +25,14 @@ func (r *Reader) Peek(n int) ([]byte, error) {
 	return r.r.Peek(n)
 }
 
-func (r *Reader) Read(data []byte) error {
+func (r *Reader) Read(data []byte) (int, error) {
 	readLen, tempNum, total := 0, 0, len(data)
 	var err error
 	for readLen < total && err == nil {
 		tempNum, err = r.r.Read(data[readLen:total])
 		readLen += tempNum
 	}
-	return nil
+	return readLen, nil
 }
 
 func (r *Reader) ReadN(n uint32) ([]byte, error) {
@@ -41,7 +41,7 @@ func (r *Reader) ReadN(n uint32) ([]byte, error) {
 		return result, nil
 	}
 
-	if err := r.Read(result); err != nil {
+	if _, err := r.Read(result); err != nil {
 		return nil, err
 	}
 	return result, nil
@@ -49,7 +49,7 @@ func (r *Reader) ReadN(n uint32) ([]byte, error) {
 
 func (r *Reader) ReadUint32() (uint32, error) {
 	buf := make([]byte, 4)
-	if err := r.Read(buf); err != nil {
+	if _, err := r.Read(buf); err != nil {
 		return 0, err
 	}
 	v := binary.LittleEndian.Uint32(buf[0:4])

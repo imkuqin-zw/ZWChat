@@ -19,7 +19,7 @@ func NewServer(l net.Listener, sendChannelSize int) *Server {
 	return &Server{
 		listener:        l,
 		manager:         NewManager(),
-		defaultCode:     DefaultCode,
+		defaultCode:     ProtoTcp,
 		sendChannelSize: sendChannelSize,
 	}
 }

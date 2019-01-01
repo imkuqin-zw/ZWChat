@@ -38,6 +38,9 @@ func (s *Server) sessionLoop(client *client.Client) {
 		return
 	}
 	for {
+		if client.Session.IsWaiting() {
+			break
+		}
 		reqData, err := client.Session.Receive()
 		if err != nil {
 			glog.Error(err)

@@ -64,7 +64,3 @@ func IsWsHandshake(header map[string]string) bool {
 	}
 	return false
 }
-
-func Unpack(r *Reader) ([]byte, error) {
-	r.ReadN()
-}

@@ -8,11 +8,12 @@ import (
 	"net"
 	"time"
 	"sync/atomic"
-	"net/http"
+	"sync"
 )
 
 var SessionClosedErr = fmt.Errorf("[session] Session Closed")
-var SessionBlockedError = fmt.Errorf("[session] Session Blocked")
+var SessionBlockedErr = fmt.Errorf("[session] Session Blocked")
+var SessionWaitingErr = fmt.Errorf("[session] Session Waiting")
 
 var globalSessionId uint64
 
@@ -38,7 +39,9 @@ type Session struct {
 	conn       net.Conn
 	r          *Reader //读取数据的bufer
 	codec      Codec   //打包和解包接口
-	closeFlag  int32   //链接是否关闭标识, 用int型是为了线程安全的改值
+	WaiteFlag int32   //等待关闭的状态（不接受消息）
+	closeWaite sync.WaitGroup //等待关闭
+	closeFlag  int32   //连接是否关闭标识, 用int型是为了线程安全的改值
 	closeChan  chan int
 	sendChan   chan interface{}
 	userId     uint64 //用户唯一标识
@@ -47,6 +50,7 @@ type Session struct {
 	shareKey   []byte
 	cfg        SessionCfg
 	connType   int8 //连接类型
+	wsConn     WsConn
 }
 
 func newSession(manager *Manager, conn net.Conn, defaultCode Codec, sendChanSize int, cfg SessionCfg) *Session {
@@ -64,6 +68,16 @@ func newSession(manager *Manager, conn net.Conn, defaultCode Codec, sendChanSize
 		go session.sendLoop()
 	}
 	return session
+}
+
+//设置连接处于等待状态
+func (session *Session) SetWaite() {
+	atomic.CompareAndSwapInt32(&session.closeFlag, 0, 1)
+}
+
+//判断连接是否为等待状态
+func (session *Session) IsWaiting() bool {
+	return atomic.LoadInt32(&session.closeFlag) == 1
 }
 
 func (session *Session) SetCodec(codec Codec) {
@@ -91,11 +105,13 @@ func (session *Session) SetShareKey(shareKey []byte) {
 }
 
 func (session *Session) GetShareKey(shareKeyId []byte) []byte {
+	var shareKey []byte
 	if !IsBytesAllZero(session.shareKey) {
-		return session.shareKey
+		shareKey = session.shareKey
 	} else {
 
 	}
+	return shareKey
 }
 
 func (session *Session) sendLoop() {
@@ -126,6 +142,7 @@ func (session *Session) sendLoop() {
 
 func (session *Session) Close() error {
 	if atomic.CompareAndSwapInt32(&session.closeFlag, 0, 1) {
+		session.closeWaite.Wait()
 		err := session.conn.Close()
 		close(session.closeChan)
 		if session.manager != nil {
@@ -149,7 +166,7 @@ func (session *Session) IsHttp() bool {
 }
 
 func (session *Session) InitCodec() error {
-	if session.IsHttp(){
+	if session.IsHttp() {
 		headers := GetHeader(session.r, session.cfg.MaxMsgSize)
 		if IsWsHandshake(headers) {
 			if err := CheckUpgrade(headers); err != nil {

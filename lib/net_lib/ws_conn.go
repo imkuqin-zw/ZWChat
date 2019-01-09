@@ -79,7 +79,6 @@ var (
 type WsConn struct {
 	readRemaining  int64
 	readDecompress bool
-	r              *Reader
 }
 
 func isControl(frameType int) bool {
@@ -88,7 +87,7 @@ func isControl(frameType int) bool {
 
 // WriteControl writes a control message with the given deadline. The allowed
 // message types are CloseMessage, PingMessage and PongMessage.
-func (c *WsConn) WriteControl(messageType int, data []byte, deadline time.Time) error {
+func (c *Session) WriteControl(messageType int, data []byte, deadline time.Time) error {
 	if !isControl(messageType) {
 		return errBadWriteOpCode
 	}
@@ -128,16 +127,16 @@ func (c *WsConn) WriteControl(messageType int, data []byte, deadline time.Time) 
 	return nil
 }
 
-func (c *WsConn) handleProtocolError(message string) error {
+func (c *Session) handleProtocolError(message string) error {
 	c.WriteControl(CloseMessage, FormatCloseMessage(CloseProtocolError, message), time.Now().Add(writeWait))
 	return errors.New("websocket: " + message)
 }
 
-func (c *WsConn) advanceFrame() (int, error) {
+func (c *Session) advanceFrame() (int, error) {
 	// 1. Skip remainder of previous frame.
 	//读取上一次剩余的帧
-	if c.readRemaining > 0 {
-		if _, err := io.CopyN(ioutil.Discard, c.r, c.readRemaining); err != nil {
+	if c.wsConn.readRemaining > 0 {
+		if _, err := io.CopyN(ioutil.Discard, c.r, c.wsConn.readRemaining); err != nil {
 			return noFrame, err
 		}
 	}

@@ -37,11 +37,11 @@ type Session struct {
 	id         uint64 //会话唯一标识
 	manager    *Manager
 	conn       net.Conn
-	r          *Reader //读取数据的bufer
-	codec      Codec   //打包和解包接口
-	WaiteFlag int32   //等待关闭的状态（不接受消息）
-	closeWaite sync.WaitGroup //等待关闭
-	closeFlag  int32   //连接是否关闭标识, 用int型是为了线程安全的改值
+	r          *Reader        //读取数据的bufer
+	codec      Codec          //打包和解包接口
+	waitFlag   int32          //等待关闭的状态（不接受消息）
+	closeWait  sync.WaitGroup //等待关闭
+	closeFlag  int32          //连接是否关闭标识, 用int型是为了线程安全的改值
 	closeChan  chan int
 	sendChan   chan interface{}
 	userId     uint64 //用户唯一标识
@@ -72,12 +72,12 @@ func newSession(manager *Manager, conn net.Conn, defaultCode Codec, sendChanSize
 
 //设置连接处于等待状态
 func (session *Session) SetWaite() {
-	atomic.CompareAndSwapInt32(&session.closeFlag, 0, 1)
+	atomic.CompareAndSwapInt32(&session.waitFlag, 0, 1)
 }
 
 //判断连接是否为等待状态
 func (session *Session) IsWaiting() bool {
-	return atomic.LoadInt32(&session.closeFlag) == 1
+	return atomic.LoadInt32(&session.waitFlag) == 1
 }
 
 func (session *Session) SetCodec(codec Codec) {
@@ -142,7 +142,7 @@ func (session *Session) sendLoop() {
 
 func (session *Session) Close() error {
 	if atomic.CompareAndSwapInt32(&session.closeFlag, 0, 1) {
-		session.closeWaite.Wait()
+		session.closeWait.Wait()
 		err := session.conn.Close()
 		close(session.closeChan)
 		if session.manager != nil {

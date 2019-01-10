@@ -35,7 +35,7 @@ func (r *Reader) Read(data []byte) (int, error) {
 	return readLen, nil
 }
 
-func (r *Reader) ReadN(n uint32) ([]byte, error) {
+func (r *Reader) ReadN(n int) ([]byte, error) {
 	result := make([]byte, n)
 	if n == 0 {
 		return result, nil

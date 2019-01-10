@@ -37,9 +37,15 @@ func (codec *ProtoWsCode) UnPack(session *Session) ([]byte, error) {
 		session.conn.SetReadDeadline(time.Time{})
 	}
 
+	for session.wsConn.readErr == nil {
+		frameType, err := session.advanceFrame()
+		if err != nil {
+			c.readErr = hideTempErr(err)
+			break
+		}
+	}
+
+
+
 	return
-}
-
-func (Codec *ProtoWsCode) advanceFrame(r *Reader) (int, error) {
-
 }

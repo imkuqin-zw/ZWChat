@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 	"errors"
 	"bat_common/protobuffs/pbWithClient"
+	"encoding/binary"
 )
 
 const (
@@ -71,6 +72,7 @@ const (
 )
 
 var (
+	errWriteTimeout        = errors.New("websocket: write timeout")
 	errBadWriteOpCode      = errors.New("websocket: bad write message type")
 	errWriteClosed         = errors.New("websocket: write closed")
 	errInvalidControlFrame = errors.New("websocket: invalid control frame")
@@ -79,6 +81,11 @@ var (
 type WsConn struct {
 	readRemaining  int64
 	readDecompress bool
+	readFinal      bool
+	readLength     int64
+	readMaskPos    int
+	readMaskKey    [4]byte
+	readErr 	   error
 }
 
 func isControl(frameType int) bool {
@@ -110,19 +117,16 @@ func (c *Session) WriteControl(messageType int, data []byte, deadline time.Time)
 		}
 	}
 
-	c.conn.GetConn().SetWriteDeadline(deadline)
+	c.conn.SetWriteDeadline(deadline)
 	//ws信令消息
 	sig := &batprotobuf.Bytes{
 		ByteArr: buf,
 	}
 	msg := CreateWSPlainMessage(sig, c.conn)
-	c.conn.SendMessage(&msg)
-	//_, err = c.conn.Write(buf)
-	//if err != nil {
-	//	return c.writeFatal(err)
-	//}
+	c.Send(msg)
+
 	if messageType == CloseMessage {
-		c.writeFatal(ErrCloseSent)
+		c.SetWaite()
 	}
 	return nil
 }
@@ -162,68 +166,63 @@ func (c *Session) advanceFrame() (int, error) {
 	//是否有掩码
 	mask := p[1]&maskBit != 0
 	//当前帧剩余位（消息长度）
-	c.readRemaining = int64(p[1] & 0x7f)
+	c.wsConn.readRemaining = int64(p[1] & 0x7f)
 
 	switch frameType {
 	case CloseMessage, PingMessage, PongMessage:
-		if c.readRemaining > maxControlFramePayloadSize {
+		if c.wsConn.readRemaining > maxControlFramePayloadSize {
 			return noFrame, c.handleProtocolError("control frame length > 125")
 		}
 		if !final {
 			return noFrame, c.handleProtocolError("control frame not final")
 		}
 	case TextMessage, BinaryMessage:
-		if !c.readFinal {
+		if !c.wsConn.readFinal {
 			return noFrame, c.handleProtocolError("message start before final message frame")
 		}
-		c.readFinal = final
+		c.wsConn.readFinal = final
 	case continuationFrame:
-		if c.readFinal {
+		if c.wsConn.readFinal {
 			return noFrame, c.handleProtocolError("continuation after final message frame")
 		}
-		c.readFinal = final
+		c.wsConn.readFinal = final
 	default:
 		return noFrame, c.handleProtocolError("unknown opcode " + strconv.Itoa(frameType))
 	}
 
 	// 3. Read and parse frame length.
 
-	switch c.readRemaining {
+	switch c.wsConn.readRemaining {
 	case 126:
-		p, err := c.read(2)
+		p, err := c.r.ReadN(2)
 		if err != nil {
 			return noFrame, err
 		}
 		//16位的数据包大小
-		c.readRemaining = int64(binary.BigEndian.Uint16(p))
+		c.wsConn.readRemaining = int64(binary.BigEndian.Uint16(p))
 	case 127:
-		p, err := c.read(8)
+		p, err := c.r.ReadN(8)
 		if err != nil {
 			return noFrame, err
 		}
 		//64位的数据包大小
-		c.readRemaining = int64(binary.BigEndian.Uint64(p))
-	}
-
-	// 4. Handle frame masking.
-	if mask != c.isServer {
-		return noFrame, c.handleProtocolError("incorrect mask flag")
+		c.wsConn.readRemaining = int64(binary.BigEndian.Uint64(p))
 	}
 
 	if mask {
-		c.readMaskPos = 0
+		c.wsConn.readMaskPos = 0
 		//4字节的mask key
-		p, err := c.read(len(c.readMaskKey))
+		p, err := c.r.ReadN(len(c.wsConn.readMaskKey))
 		if err != nil {
 			return noFrame, err
 		}
-		copy(c.readMaskKey[:], p)
+		copy(c.wsConn.readMaskKey[:], p)
 	}
 	// 5. For text and binary messages, enforce read limit and return.
 	//如果是文本和二进制消息，检测读取限制，如果超过了则强制退出
 	if frameType == continuationFrame || frameType == TextMessage || frameType == BinaryMessage {
-		c.readLength += c.readRemaining
-		if c.readLimit > 0 && c.readLength > c.readLimit {
+		c.wsConn.readLength += c.wsConn.readRemaining
+		if c.cfg.MaxMsgSize > 0 && c.wsConn.readLength > int64(c.cfg.MaxMsgSize) {
 			c.WriteControl(CloseMessage, FormatCloseMessage(CloseMessageTooBig, ""), time.Now().Add(writeWait))
 			return noFrame, ErrReadLimit
 		}

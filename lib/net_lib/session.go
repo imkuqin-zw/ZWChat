@@ -119,6 +119,7 @@ func (session *Session) sendLoop() {
 	for {
 		select {
 		case msg := <-session.sendChan:
+			//TODO 解析这个msg
 			buf, err := session.codec.Packet(msg, session)
 			if err != nil {
 				return
@@ -219,6 +220,7 @@ func (session *Session) Send(msg interface{}) error {
 		return SessionClosedErr
 	}
 	if session.sendChan == nil {
+		//TODO 解析这个msg
 		buf, err := session.codec.Packet(msg, session)
 		if err != nil {
 			return err

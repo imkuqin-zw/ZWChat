@@ -1,35 +1,33 @@
 package net_lib
 
 import (
-	"time"
 	"github.com/golang/protobuf/proto"
 	"github.com/imkuqin-zw/ZWChat/common/logger"
 	"go.uber.org/zap"
+	"time"
 )
 
 type ProtoTcpCode struct{}
 
 func (codec *ProtoTcpCode) Packet(msg interface{}, session *Session) ([]byte, error) {
-	authKeyId := session.GetShareKeyId()
-	shareKey := session.GetShareKey(authKeyId)
 	body, err := proto.Marshal(msg.(proto.Message))
 	if err != nil {
 		logger.Error("Proto Packet Marshal err: ", zap.Error(err))
 		return nil, err
 	}
-	result := new(Writer)
-	if len(shareKey) == 0 { // 不加密
-		result.WriteUint32(24 + uint32(len(body)))
-		result.Write(authKeyId, make([]byte, 16), body)
-	} else { // 加密
-		msgKey, enBytes, err := encrypt(shareKey, body)
-		if err != nil {
-			return nil, err
-		}
-		result.WriteUint32(24 + uint32(len(enBytes)))
-		result.Write(authKeyId, msgKey, enBytes)
-	}
-	return result.Bytes(), nil
+	//result := new(Writer)
+	//if len(shareKey) == 0 { // 不加密
+	//	result.WriteUint32(24 + uint32(len(body)))
+	//	result.Write(authKeyId, make([]byte, 16), body)
+	//} else { // 加密
+	//	msgKey, enBytes, err := encrypt(shareKey, body)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	result.WriteUint32(24 + uint32(len(enBytes)))
+	//	result.Write(authKeyId, msgKey, enBytes)
+	//}
+	return body, nil
 }
 
 func (codec *ProtoTcpCode) UnPack(session *Session) ([]byte, error) {
@@ -54,7 +52,7 @@ func (codec *ProtoTcpCode) UnPack(session *Session) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := codec.getData(session.r, length-24)
+	data, err := codec.getData(session.r, int(length-24))
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +70,7 @@ func (codec *ProtoTcpCode) UnPack(session *Session) ([]byte, error) {
 	return result, nil
 }
 
-func (codec *ProtoTcpCode) getData(r *Reader, length uint32) ([]byte, error) {
+func (codec *ProtoTcpCode) getData(r *Reader, length int) ([]byte, error) {
 	buf, err := r.ReadN(length)
 	if err != nil {
 		logger.Error("Proto getData err: ", zap.Error(err))
@@ -109,4 +107,3 @@ func (codec *ProtoTcpCode) getMsgKey(r *Reader) ([]byte, error) {
 func (codec *ProtoTcpCode) getDataLen(r *Reader) (uint32, error) {
 	return r.ReadUint32()
 }
-

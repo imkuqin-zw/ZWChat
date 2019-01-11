@@ -1,14 +1,16 @@
 package net_lib
 
 import (
+	"bat_common/protobuffs/pbWithClient"
+	"encoding/binary"
+	"errors"
+	"github.com/imkuqin-zw/ZWChat/common/logger"
+	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
 	"strconv"
 	"time"
 	"unicode/utf8"
-	"errors"
-	"bat_common/protobuffs/pbWithClient"
-	"encoding/binary"
 )
 
 const (
@@ -29,6 +31,25 @@ const (
 	continuationFrame = 0
 	noFrame           = -1
 )
+
+var validReceivedCloseCodes = map[int]bool{
+	// see http://www.iana.org/assignments/websocket/websocket.xhtml#close-code-number
+
+	CloseNormalClosure:           true,
+	CloseGoingAway:               true,
+	CloseProtocolError:           true,
+	CloseUnsupportedData:         true,
+	CloseNoStatusReceived:        false,
+	CloseAbnormalClosure:         false,
+	CloseInvalidFramePayloadData: true,
+	ClosePolicyViolation:         true,
+	CloseMessageTooBig:           true,
+	CloseMandatoryExtension:      true,
+	CloseInternalServerErr:       true,
+	CloseServiceRestart:          true,
+	CloseTryAgainLater:           true,
+	CloseTLSHandshake:            false,
+}
 
 // Close codes defined in RFC 6455, section 11.7.
 const (
@@ -76,16 +97,21 @@ var (
 	errBadWriteOpCode      = errors.New("websocket: bad write message type")
 	errWriteClosed         = errors.New("websocket: write closed")
 	errInvalidControlFrame = errors.New("websocket: invalid control frame")
+	errClientClose         = errors.New("websocket: client close")
+	errUnexpectedEOF       = errors.New("websocket: unexpected EOF")
 )
 
 type WsConn struct {
 	readRemaining  int64
 	readDecompress bool
 	readFinal      bool
-	readLength     int64
+	readLength     uint32
 	readMaskPos    int
 	readMaskKey    [4]byte
-	readErr 	   error
+	readErr        error
+	handlePong     func([]byte) error
+	handlePing     func([]byte) error
+	handleClose    func(int, string) error
 }
 
 func isControl(frameType int) bool {
@@ -116,7 +142,9 @@ func (c *Session) WriteControl(messageType int, data []byte, deadline time.Time)
 			return errWriteTimeout
 		}
 	}
-
+	if messageType == CloseMessage {
+		c.SetWaite()
+	}
 	c.conn.SetWriteDeadline(deadline)
 	//ws信令消息
 	sig := &batprotobuf.Bytes{
@@ -124,11 +152,19 @@ func (c *Session) WriteControl(messageType int, data []byte, deadline time.Time)
 	}
 	msg := CreateWSPlainMessage(sig, c.conn)
 	c.Send(msg)
-
-	if messageType == CloseMessage {
-		c.SetWaite()
-	}
 	return nil
+}
+
+// FormatCloseMessage formats closeCode and text as a WebSocket close message.
+func FormatCloseMessage(closeCode int, text string) []byte {
+	buf := make([]byte, 2+len(text))
+	binary.BigEndian.PutUint16(buf, uint16(closeCode))
+	copy(buf[2:], text)
+	return buf
+}
+
+func isValidReceivedCloseCode(code int) bool {
+	return validReceivedCloseCodes[code] || (code >= 3000 && code <= 4999)
 }
 
 func (c *Session) handleProtocolError(message string) error {
@@ -191,7 +227,6 @@ func (c *Session) advanceFrame() (int, error) {
 	}
 
 	// 3. Read and parse frame length.
-
 	switch c.wsConn.readRemaining {
 	case 126:
 		p, err := c.r.ReadN(2)
@@ -221,37 +256,35 @@ func (c *Session) advanceFrame() (int, error) {
 	// 5. For text and binary messages, enforce read limit and return.
 	//如果是文本和二进制消息，检测读取限制，如果超过了则强制退出
 	if frameType == continuationFrame || frameType == TextMessage || frameType == BinaryMessage {
-		c.wsConn.readLength += c.wsConn.readRemaining
-		if c.cfg.MaxMsgSize > 0 && c.wsConn.readLength > int64(c.cfg.MaxMsgSize) {
+		c.wsConn.readLength += uint32(c.wsConn.readRemaining)
+		if c.cfg.MaxMsgSize > 0 && c.wsConn.readLength > c.cfg.MaxMsgSize {
+			logger.Debug("advanceFrame lenth error:", zap.Uint32("length", c.wsConn.readLength))
 			c.WriteControl(CloseMessage, FormatCloseMessage(CloseMessageTooBig, ""), time.Now().Add(writeWait))
-			return noFrame, ErrReadLimit
+			return noFrame, DataLenErr
 		}
 		return frameType, nil
 	}
 
 	// 6. Read control frame payload.
 	var payload []byte
-	if c.readRemaining > 0 {
-		payload, err = c.read(int(c.readRemaining))
-		c.readRemaining = 0
+	if c.wsConn.readRemaining > 0 {
+		payload, err = c.r.ReadN(int(c.wsConn.readRemaining))
+		c.wsConn.readRemaining = 0
 		if err != nil {
 			return noFrame, err
 		}
-		if c.isServer {
-			//解码
-			maskBytes(c.readMaskKey, 0, payload)
-		}
+		//解码
+		maskBytes(c.wsConn.readMaskKey, 0, payload)
 	}
 
 	// 7. Process control frame payload.
-
 	switch frameType {
 	case PongMessage:
-		if err := c.handlePong(string(payload)); err != nil {
+		if err := c.wsConn.handlePong(payload); err != nil {
 			return noFrame, err
 		}
 	case PingMessage:
-		if err := c.handlePing(string(payload)); err != nil {
+		if err := c.wsConn.handlePing(payload); err != nil {
 			return noFrame, err
 		}
 	case CloseMessage:
@@ -267,11 +300,51 @@ func (c *Session) advanceFrame() (int, error) {
 				return noFrame, c.handleProtocolError("invalid utf8 payload in close frame")
 			}
 		}
-		if err := c.handleClose(closeCode, closeText); err != nil {
-			return noFrame, err
-		}
-		return noFrame, &CloseError{Code: closeCode, Text: closeText}
+		return noFrame, errClientClose
 	}
 
 	return frameType, nil
+}
+
+func NewMessageReader(session *Session) io.Reader {
+	return &messageReader{session: session}
+}
+
+type messageReader struct{ session *Session }
+
+func (r *messageReader) Read(b []byte) (int, error) {
+	s := r.session
+	for s.wsConn.readErr == nil {
+		if s.wsConn.readRemaining > 0 {
+			if int64(len(b)) > s.wsConn.readRemaining {
+				b = b[:s.wsConn.readRemaining]
+			}
+			n, err := s.r.Read(b)
+			s.wsConn.readErr = err
+			s.wsConn.readMaskPos = maskBytes(s.wsConn.readMaskKey, s.wsConn.readMaskPos, b[:n])
+			s.wsConn.readRemaining -= int64(n)
+			if s.wsConn.readRemaining > 0 && s.wsConn.readErr == io.EOF {
+				s.wsConn.readErr = errUnexpectedEOF
+			}
+			return n, s.wsConn.readErr
+		}
+
+		if s.wsConn.readFinal {
+			return 0, io.EOF
+		}
+
+		frameType, err := s.advanceFrame()
+		switch {
+		case err != nil:
+			s.wsConn.readErr = err
+		case frameType == TextMessage || frameType == BinaryMessage:
+			s.wsConn.readErr = errors.New("websocket: internal error, unexpected text or binary in Reader")
+		}
+	}
+
+	err := s.wsConn.readErr
+	if err == io.EOF {
+		err = errUnexpectedEOF
+	}
+	return 0, err
 }

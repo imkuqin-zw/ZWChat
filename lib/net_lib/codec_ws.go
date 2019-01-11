@@ -1,6 +1,13 @@
 package net_lib
 
-import "time"
+import (
+	"github.com/golang/protobuf/proto"
+	"github.com/imkuqin-zw/ZWChat/common/logger"
+	"go.uber.org/zap"
+	"io"
+	"io/ioutil"
+	"time"
+)
 
 type ProtoWsCode struct{}
 
@@ -17,7 +24,7 @@ func (codec *ProtoWsCode) Packet(msg interface{}, session *Session) ([]byte, err
 		result.WriteUint32(24 + uint32(len(body)))
 		result.Write(authKeyId, make([]byte, 16), body)
 	} else { // 加密
-		msgKey, enBytes, err := codec.encrypt(shareKey, body)
+		msgKey, enBytes, err := encrypt(shareKey, body)
 		if err != nil {
 			return nil, err
 		}
@@ -32,20 +39,56 @@ func (codec *ProtoWsCode) UnPack(session *Session) ([]byte, error) {
 		deadTime := time.Now().Add(time.Second * time.Duration(session.cfg.ReadDeadLine))
 		session.conn.SetReadDeadline(deadTime)
 	}
-
 	if session.cfg.ReadDeadLine > 0 {
 		session.conn.SetReadDeadline(time.Time{})
 	}
-
 	for session.wsConn.readErr == nil {
 		frameType, err := session.advanceFrame()
 		if err != nil {
-			c.readErr = hideTempErr(err)
+			session.wsConn.readErr = err
 			break
 		}
+		if frameType != TextMessage && frameType != BinaryMessage {
+			continue
+		}
+		var reader io.Reader
+		reader = NewMessageReader(session)
+		data, err := ioutil.ReadAll(reader)
+		if err != nil {
+			session.wsConn.readErr = err
+			break
+		}
+		if session.cfg.ReadDeadLine > 0 {
+			session.conn.SetReadDeadline(time.Time{})
+		}
+		authKey := codec.getAuthKeyId(data, session)
+		msgKey := codec.getMsgKey(data)
+		var result = data
+		if msgKey != nil {
+			shareKey := session.GetShareKey(authKey)
+			result, err = decrypt(shareKey, msgKey, data)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
 	}
+	return nil, session.wsConn.readErr
+}
 
+func (codec *ProtoWsCode) getAuthKeyId(data []byte, session *Session) []byte {
+	buf, data := data[:8], data[8:]
+	if !IsBytesAllZero(buf) {
+		session.SetShareKeyId(buf)
+		return buf
+	}
+	return nil
+}
 
-
-	return
+func (codec *ProtoWsCode) getMsgKey(data []byte) []byte {
+	buf, data := data[:16], data[16:]
+	if !IsBytesAllZero(buf) {
+		return buf
+	}
+	return nil
 }

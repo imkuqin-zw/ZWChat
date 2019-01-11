@@ -6,9 +6,9 @@ import (
 	"github.com/imkuqin-zw/ZWChat/common/logger"
 	"go.uber.org/zap"
 	"net"
-	"time"
-	"sync/atomic"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 var SessionClosedErr = fmt.Errorf("[session] Session Closed")
@@ -18,7 +18,7 @@ var SessionWaitingErr = fmt.Errorf("[session] Session Waiting")
 var globalSessionId uint64
 
 const (
-	TCP  = iota
+	TCP = iota
 	HTTP
 	WS
 )
@@ -43,7 +43,7 @@ type Session struct {
 	closeWait  sync.WaitGroup //等待关闭
 	closeFlag  int32          //连接是否关闭标识, 用int型是为了线程安全的改值
 	closeChan  chan int
-	sendChan   chan interface{}
+	sendChan   chan *OutMessage
 	userId     uint64 //用户唯一标识
 	msgId      uint64 //消息的唯一标识
 	shareKeyId []byte

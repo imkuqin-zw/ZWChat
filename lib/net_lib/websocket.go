@@ -1,13 +1,14 @@
 package net_lib
 
 import (
-	"src(复件)/src(复件)/github.com/kataras/go-errors"
+	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
+	"errors"
 	"fmt"
-	"time"
 	"strings"
-	"bytes"
+	"time"
+	"unsafe"
 )
 
 const http200Upgrade = "HTTP/1.1 101 Switching Protocols\r\n" +
@@ -15,6 +16,7 @@ const http200Upgrade = "HTTP/1.1 101 Switching Protocols\r\n" +
 	"Connection: Upgrade\r\n" +
 	"Sec-WebSocket-Accept: %s\r\n" +
 	"Date:%s\r\n\r\n"
+
 var keyGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 var WsSWKErr = errors.New("Sec-WebSocket-Key header is error")
 var WsUpgErr = errors.New("Upgrade header is error")
@@ -44,7 +46,7 @@ func CreateUpgradeResp(secWsKey string) string {
 	return fmt.Sprintf(http200Upgrade, secWsKey, modtimeStr)
 }
 
-func GetHeader(r *Reader, maxSize uint32) (map[string]string) {
+func GetHeader(r *Reader, maxSize uint32) map[string]string {
 	data, _ := r.Peek(r.Buffered(maxSize))
 	data = bytes.SplitN(data, []byte("\r\n\r\n"), 1)[0]
 	headerBytes := bytes.Split(data, []byte("\r\n"))[1:]
@@ -63,4 +65,51 @@ func IsWsHandshake(header map[string]string) bool {
 		}
 	}
 	return false
+}
+
+const wordSize = int(unsafe.Sizeof(uintptr(0)))
+
+//解码
+func maskBytes(key [4]byte, pos int, b []byte) int {
+
+	// Mask one byte at a time for small buffers.
+	if len(b) < 2*wordSize {
+		for i := range b {
+			b[i] ^= key[pos&3]
+			pos++
+		}
+		return pos & 3
+	}
+
+	// Mask one byte at a time to word boundary.
+	if n := int(uintptr(unsafe.Pointer(&b[0]))) % wordSize; n != 0 {
+		n = wordSize - n
+		for i := range b[:n] {
+			b[i] ^= key[pos&3]
+			pos++
+		}
+		b = b[n:]
+	}
+
+	// Create aligned word size key.
+	var k [wordSize]byte
+	for i := range k {
+		k[i] = key[(pos+i)&3]
+	}
+	kw := *(*uintptr)(unsafe.Pointer(&k))
+
+	// Mask one word at a time.
+	n := (len(b) / wordSize) * wordSize
+	for i := 0; i < n; i += wordSize {
+		*(*uintptr)(unsafe.Pointer(uintptr(unsafe.Pointer(&b[0])) + uintptr(i))) ^= kw
+	}
+
+	// Mask one byte at a time for remaining bytes.
+	b = b[n:]
+	for i := range b {
+		b[i] ^= key[pos&3]
+		pos++
+	}
+
+	return pos & 3
 }

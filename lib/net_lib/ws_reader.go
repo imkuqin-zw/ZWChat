@@ -1,6 +1,9 @@
 package net_lib
 
-import "io"
+import (
+	"io"
+	"errors"
+)
 
 func NewMessageReader(session *Session) io.Reader {
 	return &messageReader{session: session}

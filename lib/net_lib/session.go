@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"strings"
 )
 
 var SessionClosedErr = fmt.Errorf("[session] Session Closed")
@@ -18,19 +19,19 @@ var SessionWaitingErr = fmt.Errorf("[session] Session Waiting")
 var globalSessionId uint64
 
 const (
-	TCP = iota
+	TCP  = iota
 	HTTP
 	WS
 )
 
 type SessionCfg struct {
-	ReadDeadLine  int //读数据限制的秒数
-	WriteDeadLine int //写数据限制的秒数
-	maxAttempts   int //最大限制数量
-	duration      int64
-	interval      int64  //窗口时间间隔(s)
-	count         int64  //窗口数量
-	MaxMsgSize    uint32 //单条消息的最大字节数
+	ReadDeadLine  int    `yaml:"readDeadLine"`  //读数据限制的秒数
+	WriteDeadLine int    `yaml:"writeDeadLine"` //写数据限制的秒数
+	MaxMsgSize    uint32 `yaml:"maxMsgSize"`    //单条消息的最大字节数
+	MaxAttempts   int    `yaml:"maxAttempts"`   //最大限制数量
+	Duration      int64  `yaml:"duration"`      //时间周期
+	Interval      int64  `yaml:"interval"`      //窗口时间间隔(s)
+	Count         int64  `yaml:"count"`         //窗口数量
 }
 
 type Session struct {
@@ -50,7 +51,9 @@ type Session struct {
 	shareKey   []byte
 	cfg        SessionCfg
 	connType   int8 //连接类型
-	wsConn     WsConn
+	wsConn     *WsConn
+	RemoteIp   string //对端ip
+	RemotePort string //对端port
 }
 
 func newSession(manager *Manager, conn net.Conn, defaultCode Codec, sendChanSize int, cfg SessionCfg) *Session {
@@ -63,6 +66,10 @@ func newSession(manager *Manager, conn net.Conn, defaultCode Codec, sendChanSize
 		codec:     defaultCode,
 		cfg:       cfg,
 	}
+
+	remoteAddr := strings.Split(conn.RemoteAddr().String(), ":")
+	session.RemoteIp = remoteAddr[0]
+	session.RemotePort = remoteAddr[1]
 	if sendChanSize > 0 {
 		session.sendChan = make(chan interface{}, sendChanSize)
 		go session.sendLoop()
@@ -171,12 +178,19 @@ func (session *Session) InitCodec() error {
 		headers := GetHeader(session.r, session.cfg.MaxMsgSize)
 		if IsWsHandshake(headers) {
 			if err := CheckUpgrade(headers); err != nil {
+				logger.Debug("InitCodec", zap.Error(err))
 				return err
 			}
 			acceptKey := ComputeAcceptedKey(headers["Sec-WebSocket-Key"])
 			resp := CreateUpgradeResp(acceptKey)
 			if err := session.Write([]byte(resp)); err != nil {
 				return err
+			}
+			session.wsConn = &WsConn{
+				readFinal: true,
+				handlePong: nil,
+				handlePing: nil,
+				handleClose: nil,
 			}
 			session.SetConnType(WS)
 			session.SetCodec(ProtoWs)

@@ -19,8 +19,8 @@ var methodMap = map[string]bool{
 
 func IsHttp(r *Reader) bool {
 	data, _ := r.Peek(8)
-	method := strings.Split(string(data), "")[0]
-	method = strings.ToUpper(string(data))
+	method := strings.Split(string(data), " ")[0]
+	method = strings.ToUpper(method)
 	_, ok := methodMap[method]
 	return ok
 }

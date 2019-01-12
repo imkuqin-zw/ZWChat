@@ -1,14 +1,12 @@
 package server
 
 import (
-	"github.com/golang/glog"
-	"github.com/golang/protobuf/proto"
 	"github.com/imkuqin-zw/ZWChat/access/client"
 	"github.com/imkuqin-zw/ZWChat/access/rpc"
-	"github.com/imkuqin-zw/ZWChat/common/ecode"
 	"github.com/imkuqin-zw/ZWChat/lib/net_lib"
 	"go.uber.org/zap"
 	"github.com/imkuqin-zw/ZWChat/common/logger"
+	"fmt"
 )
 
 type Server struct {
@@ -24,10 +22,12 @@ func (s *Server) Loop(rpcClient *rpc.RPCClient) {
 	for {
 		session, err := s.Server.Accept()
 		if err != nil {
-			glog.Error(err)
+			logger.Error("session accept", zap.Error(err))
 			continue
 		}
 		c := client.New(session, rpcClient)
+		logger.Debug("session accept", zap.String("ip", session.RemoteIp),
+			zap.String("port", session.RemotePort))
 		go s.sessionLoop(c)
 	}
 }
@@ -43,24 +43,27 @@ func (s *Server) sessionLoop(client *client.Client) {
 		}
 		reqData, err := client.Session.Receive()
 		if err != nil {
-			glog.Error(err)
+			logger.Error("session receive", zap.Error(err))
+			return
 		}
-		if reqData != nil {
-			baseCMD := &protobuf.Cmd{}
-			if err = proto.Unmarshal(reqData, baseCMD); err != nil {
-				if err = client.Session.Send(&protobuf.Error{
-					Cmd:     baseCMD.Cmd,
-					ErrCoed: ecode.ServerErr.Uint32(),
-					ErrMsg:  ecode.ServerErr.String(),
-				}); err != nil {
-					glog.Error(err)
-				}
-				continue
-			}
-			if err = client.Parmse(baseCMD.Cmd, reqData); err != nil {
-				glog.Error(err)
-				continue
-			}
-		}
+		fmt.Println(string(reqData))
+		client.Session.Send(reqData)
+		//if reqData != nil {
+		//	baseCMD := &protobuf.Cmd{}
+		//	if err = proto.Unmarshal(reqData, baseCMD); err != nil {
+		//		if err = client.Session.Send(&protobuf.Error{
+		//			Cmd:     baseCMD.Cmd,
+		//			ErrCoed: ecode.ServerErr.Uint32(),
+		//			ErrMsg:  ecode.ServerErr.String(),
+		//		}); err != nil {
+		//			glog.Error(err)
+		//		}
+		//		continue
+		//	}
+		//	if err = client.Parmse(baseCMD.Cmd, reqData); err != nil {
+		//		glog.Error(err)
+		//		continue
+		//	}
+		//}
 	}
 }

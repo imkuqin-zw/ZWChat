@@ -48,18 +48,18 @@ func CreateUpgradeResp(secWsKey string) string {
 
 func GetHeader(r *Reader, maxSize uint32) map[string]string {
 	data, _ := r.Peek(r.Buffered(maxSize))
-	data = bytes.SplitN(data, []byte("\r\n\r\n"), 1)[0]
+	data = bytes.SplitN(data, []byte("\r\n\r\n"), 2)[0]
 	headerBytes := bytes.Split(data, []byte("\r\n"))[1:]
 	headers := make(map[string]string, len(headerBytes))
-	for _, item := range headers {
+	for _, item := range headerBytes {
 		header := strings.Split(string(item), ":")
-		headers[header[0]] = header[1]
+		headers[header[0]] = strings.TrimSpace(header[1])
 	}
 	return headers
 }
 
 func IsWsHandshake(header map[string]string) bool {
-	if upgrade, ok := header["Upgrade"]; !ok {
+	if upgrade, ok := header["Upgrade"]; ok {
 		if upgrade == "websocket" {
 			return true
 		}

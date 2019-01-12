@@ -1,25 +1,29 @@
 server:
- proto: "tcp"
- addr: ":11000"
-
+  proto: "tcp"
+  addr: ":11000"
+sessionCfg:
+  #读取延迟时间，如果时间内没有读取到数据则断开连接，单位（s）
+  readDeadLine: 100
+  #发送延迟时间，如果时间内没有发送完数据则断开连接，单位（s）
+  writeDeadLine: 100
+  #包体最大的限制 单位(字节)
+  maxMsgSize: 4096
 log:
- level: "debug"
- outputPaths: ["stdout"]
- errorOutputPaths: ["stdout"]
- encoding: "console"
-
-servicediscovery:
- target: "127.0.0.1:2379"
- servername: "access_server"
- rpcaddr: "access_server"
- interval: "5s"
- ttl: "15s"
-
-rpcclient:
- loginclient:
+  level: "debug"
+  outputPaths: ["stdout"]
+  errorOutputPaths: ["stdout"]
+  encoding: "console"
+  development: true
+serviceDiscovery:
   target: "127.0.0.1:2379"
-  servername: "login_server"
-
+  serverName: "access_server"
+  rpcAddr: "access_server"
+  interval: "5s"
+  ttl: "15s"
+rpcclient:
+  loginClient:
+    target: "127.0.0.1:2379"
+    serverName: "login_server"
 etcd:
- dialtimeout: "1s"
- prefix: "zw_chat"
+  dialTimeOut: "1s"
+  prefix: "zw_chat"

@@ -7,8 +7,8 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"os"
-	"fmt"
 	"go.uber.org/zap"
+	"github.com/imkuqin-zw/ZWChat/lib/net_lib"
 )
 
 var (
@@ -17,17 +17,18 @@ var (
 )
 
 type Config struct {
-	Server           *commconf.Server
-	Path             *commconf.Path
-	ServiceDiscovery *commconf.ServiceDiscoveryServer
-	RpcClient        *RpcClient
-	RpcServer        *commconf.Server
-	Etcd             *commconf.Etcd
-	Log              *zap.Config
+	Server           *commconf.Server                 `yaml:"server"`
+	Path             *commconf.Path                   `yaml:"path"`
+	ServiceDiscovery *commconf.ServiceDiscoveryServer `yaml:"serviceDiscovery"`
+	RpcClient        *RpcClient                       `yaml:"rpcClient"`
+	RpcServer        *commconf.Server                 `yaml:"rpcServer"`
+	Etcd             *commconf.Etcd                   `yaml:"etcd"`
+	Log              *zap.Config                      `yaml:"log"`
+	SessionCfg       *net_lib.SessionCfg              `yaml:"sessionCfg"`
 }
 
 type RpcClient struct {
-	LoginClient *commconf.ServiceDiscoveryClient
+	LoginClient *commconf.ServiceDiscoveryClient `yaml:"loginClient"`
 }
 
 func init() {
@@ -49,8 +50,5 @@ func Init() (err error) {
 	if err != nil {
 		return
 	}
-	fmt.Println(Conf.Etcd)
-	fmt.Println(Conf.RpcClient)
-	fmt.Println(Conf.ServiceDiscovery)
 	return
 }

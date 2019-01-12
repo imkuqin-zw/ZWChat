@@ -5,6 +5,8 @@ import (
 	"net"
 	"strings"
 	"time"
+	"github.com/imkuqin-zw/ZWChat/common/logger"
+	"go.uber.org/zap"
 )
 
 type Server struct {
@@ -15,12 +17,13 @@ type Server struct {
 	sessionCfg      *SessionCfg
 }
 
-func NewServer(l net.Listener, sendChannelSize int) *Server {
+func NewServer(l net.Listener, sendChannelSize int, cfg *SessionCfg) *Server {
 	return &Server{
 		listener:        l,
 		manager:         NewManager(),
 		defaultCode:     ProtoTcp,
 		sendChannelSize: sendChannelSize,
+		sessionCfg:      cfg,
 	}
 }
 
@@ -61,10 +64,11 @@ func (server *Server) Stop() {
 	server.manager.Dispose()
 }
 
-func Serve(network, address string, sendChanSize int) (*Server, error) {
+func Serve(network, address string, cfg *SessionCfg, sendChanSize int) (*Server, error) {
 	listener, err := net.Listen(network, address)
 	if err != nil {
+		logger.Fatal("Serve", zap.Error(err))
 		return nil, err
 	}
-	return NewServer(listener, sendChanSize), nil
+	return NewServer(listener, sendChanSize, cfg), nil
 }

@@ -1,6 +1,9 @@
 package rpc
 
-import "github.com/golang/glog"
+import (
+	"github.com/imkuqin-zw/ZWChat/common/logger"
+	"go.uber.org/zap"
+)
 
 type RPCClient struct {
 	Logic *LogicRPCCli
@@ -9,7 +12,7 @@ type RPCClient struct {
 func NewRPCClient() (c *RPCClient, err error) {
 	logic, err := NewLogicRPCCli()
 	if err != nil {
-		glog.Error(err)
+		logger.Fatal("NewLogicRPCCli", zap.Error(err))
 		return
 	}
 	c = &RPCClient{

@@ -43,7 +43,7 @@ type Session struct {
 	closeWait  sync.WaitGroup //等待关闭
 	closeFlag  int32          //连接是否关闭标识, 用int型是为了线程安全的改值
 	closeChan  chan int
-	sendChan   chan *OutMessage
+	sendChan   chan interface{}
 	userId     uint64 //用户唯一标识
 	msgId      uint64 //消息的唯一标识
 	shareKeyId []byte
@@ -219,17 +219,18 @@ func (session *Session) Send(msg interface{}) error {
 	if session.IsClosed() {
 		return SessionClosedErr
 	}
-	if session.sendChan == nil {
-		//TODO 解析这个msg
-		buf, err := session.codec.Packet(msg, session)
-		if err != nil {
-			return err
-		}
-		if err = session.Write(buf); err != nil {
-			logger.Error("session.Write error: ", zap.Error(err))
-			return err
-		}
-	}
+	//if session.sendChan == nil {
+	//	//TODO 解析这个msg
+	//
+	//	buf, err := session.codec.Packet(msg, session)
+	//	if err != nil {
+	//		return err
+	//	}
+	//	if err = session.Write(buf); err != nil {
+	//		logger.Error("session.Write error: ", zap.Error(err))
+	//		return err
+	//	}
+	//}
 	select {
 	case session.sendChan <- msg:
 		return nil

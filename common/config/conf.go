@@ -11,10 +11,6 @@ type Path struct {
 	Root string
 }
 
-type Log struct {
-	Alsologtostderr string
-	LogDir string
-}
 
 type Etcd struct {
 	DialTimeout time.Duration

@@ -4,8 +4,14 @@ import "go.uber.org/zap"
 
 var logger *zap.Logger
 
-func InitLogger(cfg zap.Config) {
+func InitLogger(cfg *zap.Config) {
 	var err error
+	if cfg.Development {
+		cfg.EncoderConfig = zap.NewDevelopmentEncoderConfig()
+	} else {
+		cfg.EncoderConfig = zap.NewProductionEncoderConfig()
+	}
+
 	logger, err = cfg.Build()
 	if err != nil {
 		panic(err)

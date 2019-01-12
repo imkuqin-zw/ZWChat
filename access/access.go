@@ -9,13 +9,15 @@ import (
 	"github.com/imkuqin-zw/ZWChat/lib/net_lib"
 	"github.com/imkuqin-zw/ZWChat/access/rpc"
 	"github.com/imkuqin-zw/ZWChat/lib/service_discovery/etcd"
+	"go.uber.org/zap"
+	"github.com/imkuqin-zw/ZWChat/common/logger"
 )
 
 func main()  {
 	var err error
 	flag.Parse()
 	accessServer := server.New()
-	accessServer.Server, err = net_lib.Serve(config.Conf.Server.Proto, config.Conf.Server.Addr, &net_lib.ProtobufCodec{}, 0)
+	accessServer.Server, err = net_lib.Serve(config.Conf.Server.Proto, config.Conf.Server.Addr, 1)
 	if err != nil {
 		glog.Error(err)
 		panic(err)
@@ -25,7 +27,7 @@ func main()  {
 		glog.Error(err)
 		panic(err)
 	}
-	glog.Infof("%v %v", config.Conf.Server.Proto, config.Conf.Server.Addr)
+	logger.Info("server init success", zap.String("addr", config.Conf.Server.Addr))
 	accessServer.Loop(rpcClient)
 }
 
@@ -34,8 +36,7 @@ func init()  {
 		glog.Error("config.Init error", err)
 		panic(err)
 	}
-	flag.Set("alsologtostderr", config.Conf.Log.Alsologtostderr)
-	flag.Set("log_dir", config.Conf.Log.LogDir)
 	etcd.DialTimeout = config.Conf.Etcd.DialTimeout
 	etcd.Prefix = config.Conf.Etcd.Prefix
+	logger.InitLogger(config.Conf.Log)
 }

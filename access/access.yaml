@@ -3,8 +3,10 @@ server:
  addr: ":11000"
 
 log:
- alsologtostderr: "true"
- logdir: "log"
+ level: "debug"
+ outputPaths: ["stdout"]
+ errorOutputPaths: ["stdout"]
+ encoding: "console"
 
 servicediscovery:
  target: "127.0.0.1:2379"

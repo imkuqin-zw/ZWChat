@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"os"
 	"fmt"
+	"go.uber.org/zap"
 )
 
 var (
@@ -16,20 +17,20 @@ var (
 )
 
 type Config struct {
-	Server *commconf.Server
-	Path   *commconf.Path
-	Log    *commconf.Log
+	Server           *commconf.Server
+	Path             *commconf.Path
 	ServiceDiscovery *commconf.ServiceDiscoveryServer
-	RpcClient *RpcClient
-	RpcServer *commconf.Server
-	Etcd *commconf.Etcd
+	RpcClient        *RpcClient
+	RpcServer        *commconf.Server
+	Etcd             *commconf.Etcd
+	Log              *zap.Config
 }
 
 type RpcClient struct {
 	LoginClient *commconf.ServiceDiscoveryClient
 }
 
-func init()  {
+func init() {
 	flag.StringVar(&confPath, "conf", "./access.yaml", "config path")
 }
 

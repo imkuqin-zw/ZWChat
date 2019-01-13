@@ -6,7 +6,7 @@ import (
 )
 
 type Reader struct {
-	r   *bufio.Reader
+	r *bufio.Reader
 }
 
 func NewReader(reader *bufio.Reader) *Reader {
@@ -40,7 +40,6 @@ func (r *Reader) ReadN(n int) ([]byte, error) {
 	if n == 0 {
 		return result, nil
 	}
-
 	if _, err := r.Read(result); err != nil {
 		return nil, err
 	}

@@ -3,13 +3,13 @@ package net_lib
 import (
 	"encoding/binary"
 	"errors"
-	"time"
-	"io"
-	"io/ioutil"
-	"unicode/utf8"
+	"fmt"
 	"github.com/imkuqin-zw/ZWChat/common/logger"
 	"go.uber.org/zap"
-	"fmt"
+	"io"
+	"io/ioutil"
+	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -161,7 +161,7 @@ func (c *Session) flushFrame(extra []byte) []byte {
 	length := len(extra)
 	b0 := byte(TextMessage) | finalBit
 	b1 := byte(0)
-	result := make([]byte, 0, maxFrameHeaderSize + length)
+	result := make([]byte, 0, maxFrameHeaderSize+length)
 	copy(result[maxFrameHeaderSize:], extra)
 	switch {
 	case length >= 65536:
@@ -206,12 +206,11 @@ func (c *Session) advanceFrame() (int, error) {
 	//%xA 代表pong
 	//%xB-F 保留用于未来的控制帧
 	frameType := int(p[0] & 0xf)
-	fmt.Println(frameType,final)
 	//是否有掩码
 	mask := p[1]&maskBit != 0
 	//当前帧剩余位（消息长度）
 	c.wsConn.readRemaining = int64(p[1] & 0x7f)
-
+	fmt.Println(frameType, final, c.wsConn.readRemaining)
 	switch frameType {
 	case CloseMessage, PingMessage, PongMessage:
 		if c.wsConn.readRemaining > maxControlFramePayloadSize {
@@ -231,8 +230,8 @@ func (c *Session) advanceFrame() (int, error) {
 		}
 		c.wsConn.readFinal = final
 	default:
-		c.wsConn.readFinal = final
-		return noFrame, nil //c.handleProtocolError("unknown opcode " + strconv.Itoa(frameType))
+		c.wsConn.readFinal = true
+		//return noFrame, nil //c.handleProtocolError("unknown opcode " + strconv.Itoa(frameType))
 	}
 
 	// 3. Read and parse frame length.
@@ -280,6 +279,7 @@ func (c *Session) advanceFrame() (int, error) {
 		payload, err = c.r.ReadN(int(c.wsConn.readRemaining))
 		c.wsConn.readRemaining = 0
 		if err != nil {
+			logger.Error("advanceFrame readRemaining error:", zap.Error(err))
 			return noFrame, err
 		}
 		//解码
@@ -314,4 +314,3 @@ func (c *Session) advanceFrame() (int, error) {
 
 	return frameType, nil
 }
-

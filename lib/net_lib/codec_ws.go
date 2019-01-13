@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 	"time"
-	"fmt"
 )
 
 type ProtoWsCode struct{}
@@ -51,7 +50,6 @@ func (codec *ProtoWsCode) UnPack(session *Session) ([]byte, error) {
 			session.wsConn.readErr = err
 			break
 		}
-		fmt.Println("dsf")
 		if frameType != TextMessage && frameType != BinaryMessage {
 			continue
 		}
@@ -96,5 +94,3 @@ func (codec *ProtoWsCode) getMsgKey(data []byte) []byte {
 	}
 	return nil
 }
-
-

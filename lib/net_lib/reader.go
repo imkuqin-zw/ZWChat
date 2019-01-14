@@ -25,6 +25,10 @@ func (r *Reader) Peek(n int) ([]byte, error) {
 	return r.r.Peek(n)
 }
 
+func (r *Reader) Discard(n int) (int, error) {
+	return r.r.Discard(n)
+}
+
 func (r *Reader) Read(data []byte) (int, error) {
 	readLen, tempNum, total := 0, 0, len(data)
 	var err error

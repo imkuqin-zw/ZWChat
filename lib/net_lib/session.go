@@ -6,10 +6,10 @@ import (
 	"github.com/imkuqin-zw/ZWChat/common/logger"
 	"go.uber.org/zap"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"strings"
 )
 
 var SessionClosedErr = fmt.Errorf("[session] Session Closed")
@@ -19,7 +19,7 @@ var SessionWaitingErr = fmt.Errorf("[session] Session Waiting")
 var globalSessionId uint64
 
 const (
-	TCP  = iota
+	TCP = iota
 	HTTP
 	WS
 )
@@ -129,6 +129,7 @@ func (session *Session) sendLoop() {
 			//TODO 解析这个msg
 			buf, err := session.codec.Packet(msg, session)
 			if err != nil {
+				logger.Debug("sendLoop", zap.Error(err))
 				return
 			}
 			if session.cfg.WriteDeadLine > 0 {
@@ -175,8 +176,11 @@ func (session *Session) IsHttp() bool {
 
 func (session *Session) InitCodec() error {
 	if session.IsHttp() {
-		headers := GetHeader(session.r, session.cfg.MaxMsgSize)
+		length, headers := GetHeader(session.r, session.cfg.MaxMsgSize)
 		if IsWsHandshake(headers) {
+			if _, err := session.r.Discard(length); err != nil {
+				return err
+			}
 			if err := CheckUpgrade(headers); err != nil {
 				logger.Debug("InitCodec", zap.Error(err))
 				return err
@@ -186,10 +190,11 @@ func (session *Session) InitCodec() error {
 			if err := session.Write([]byte(resp)); err != nil {
 				return err
 			}
+
 			session.wsConn = &WsConn{
-				readFinal: true,
-				handlePong: nil,
-				handlePing: nil,
+				readFinal:   true,
+				handlePong:  nil,
+				handlePing:  nil,
 				handleClose: nil,
 			}
 			session.SetConnType(WS)

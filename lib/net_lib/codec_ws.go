@@ -13,7 +13,7 @@ type ProtoWsCode struct{}
 
 func (codec *ProtoWsCode) Packet(msg interface{}, session *Session) ([]byte, error) {
 	if data, ok := msg.([]byte); ok {
-		return data, nil
+		return session.flushFrame(data), nil
 	}
 	authKeyId := session.GetShareKeyId()
 	shareKey := session.GetShareKey(authKeyId)
@@ -63,16 +63,16 @@ func (codec *ProtoWsCode) UnPack(session *Session) ([]byte, error) {
 		if session.cfg.ReadDeadLine > 0 {
 			session.conn.SetReadDeadline(time.Time{})
 		}
-		authKey := codec.getAuthKeyId(data, session)
-		msgKey := codec.getMsgKey(data)
+		//authKey := codec.getAuthKeyId(data, session)
+		//msgKey := codec.getMsgKey(data)
 		var result = data
-		if msgKey != nil {
-			shareKey := session.GetShareKey(authKey)
-			result, err = decrypt(shareKey, msgKey, data)
-			if err != nil {
-				return nil, err
-			}
-		}
+		//if msgKey != nil {
+		//	shareKey := session.GetShareKey(authKey)
+		//	result, err = decrypt(shareKey, msgKey, data)
+		//	if err != nil {
+		//		return nil, err
+		//	}
+		//}
 		return result, nil
 	}
 	return nil, session.wsConn.readErr

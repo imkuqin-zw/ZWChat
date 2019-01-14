@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
+	"strconv"
 	"time"
 	"unicode/utf8"
 )
@@ -19,13 +20,9 @@ const (
 	// Frame header byte 1 bits from Section 5.2 of RFC 6455
 	maskBit = 1 << 7
 
-	maxFrameHeaderSize         = 2 + 8 + 4 // Fixed header + length + mask
 	maxControlFramePayloadSize = 125
 
 	writeWait = time.Second
-
-	defaultReadBufferSize  = 4096
-	defaultWriteBufferSize = 4096
 
 	continuationFrame = 0
 	noFrame           = -1
@@ -33,7 +30,6 @@ const (
 
 var validReceivedCloseCodes = map[int]bool{
 	// see http://www.iana.org/assignments/websocket/websocket.xhtml#close-code-number
-
 	CloseNormalClosure:           true,
 	CloseGoingAway:               true,
 	CloseProtocolError:           true,
@@ -145,15 +141,17 @@ func (c *Session) WriteControl(messageType int, data []byte, deadline time.Time)
 		return errInvalidControlFrame
 	}
 
-	buf := make([]byte, maxFrameHeaderSize+length)
+	buf := make([]byte, 2+length)
 	buf[0] = byte(messageType) | finalBit
-	buf[1] = byte(len(data)) | maskBit
-	copy(buf[maxFrameHeaderSize:], data)
+	buf[1] = byte(length)
+	copy(buf[2:], data)
+	c.Send(buf)
 	if messageType == CloseMessage {
+		c.closeWait.Add(1)
 		c.SetWaite()
+		c.Close()
 	}
 
-	c.Send(buf)
 	return nil
 }
 
@@ -161,21 +159,26 @@ func (c *Session) flushFrame(extra []byte) []byte {
 	length := len(extra)
 	b0 := byte(TextMessage) | finalBit
 	b1 := byte(0)
-	result := make([]byte, 0, maxFrameHeaderSize+length)
-	copy(result[maxFrameHeaderSize:], extra)
+	var result []byte
+	var headerSize int
 	switch {
 	case length >= 65536:
-		result[0] = b0
+		headerSize = 10
+		result = make([]byte, headerSize+length)
 		result[1] = b1 | 127
 		binary.BigEndian.PutUint64(result[2:], uint64(length))
 	case length > 125:
-		result[6] = b0
-		result[7] = b1 | 126
+		headerSize = 4
+		result = make([]byte, headerSize+length)
+		result[1] = b1 | 126
 		binary.BigEndian.PutUint16(result[2:], uint16(length))
 	default:
-		result[8] = b0
-		result[9] = b1 | byte(length)
+		headerSize = 2
+		result = make([]byte, headerSize+length)
+		result[1] = b1 | byte(length)
 	}
+	result[0] = b0
+	copy(result[headerSize:], extra)
 	return result
 }
 
@@ -210,7 +213,6 @@ func (c *Session) advanceFrame() (int, error) {
 	mask := p[1]&maskBit != 0
 	//当前帧剩余位（消息长度）
 	c.wsConn.readRemaining = int64(p[1] & 0x7f)
-	fmt.Println(frameType, final, c.wsConn.readRemaining)
 	switch frameType {
 	case CloseMessage, PingMessage, PongMessage:
 		if c.wsConn.readRemaining > maxControlFramePayloadSize {
@@ -230,8 +232,7 @@ func (c *Session) advanceFrame() (int, error) {
 		}
 		c.wsConn.readFinal = final
 	default:
-		c.wsConn.readFinal = true
-		//return noFrame, nil //c.handleProtocolError("unknown opcode " + strconv.Itoa(frameType))
+		return noFrame, c.handleProtocolError("unknown opcode " + strconv.Itoa(frameType))
 	}
 
 	// 3. Read and parse frame length.
@@ -285,7 +286,7 @@ func (c *Session) advanceFrame() (int, error) {
 		//解码
 		maskBytes(c.wsConn.readMaskKey, 0, payload)
 	}
-
+	fmt.Println(string(payload))
 	// 7. Process control frame payload.
 	switch frameType {
 	case PongMessage:

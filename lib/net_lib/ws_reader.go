@@ -1,8 +1,8 @@
 package net_lib
 
 import (
-	"io"
 	"errors"
+	"io"
 )
 
 func NewMessageReader(session *Session) io.Reader {
@@ -48,3 +48,6 @@ func (r *messageReader) Read(b []byte) (int, error) {
 	return 0, err
 }
 
+func (r *messageReader) Close() error {
+	return nil
+}

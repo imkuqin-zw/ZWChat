@@ -46,8 +46,9 @@ func CreateUpgradeResp(secWsKey string) string {
 	return fmt.Sprintf(http200Upgrade, secWsKey, modtimeStr)
 }
 
-func GetHeader(r *Reader, maxSize uint32) map[string]string {
+func GetHeader(r *Reader, maxSize uint32) (int, map[string]string) {
 	data, _ := r.Peek(r.Buffered(maxSize))
+	length := len(data)
 	data = bytes.SplitN(data, []byte("\r\n\r\n"), 2)[0]
 	headerBytes := bytes.Split(data, []byte("\r\n"))[1:]
 	headers := make(map[string]string, len(headerBytes))
@@ -55,7 +56,7 @@ func GetHeader(r *Reader, maxSize uint32) map[string]string {
 		header := strings.Split(string(item), ":")
 		headers[header[0]] = strings.TrimSpace(header[1])
 	}
-	return headers
+	return length, headers
 }
 
 func IsWsHandshake(header map[string]string) bool {
